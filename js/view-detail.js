@@ -53,7 +53,6 @@
             exitToBack: true, live: true, channels: channels || null };
         var s = scr('detail');
         U.clear(s);
-        s.appendChild(U.el('div', 'detail-hero'));
         s.appendChild(buildTopMenu('detail'));
         U.spinner(true);
         var still = pageNow();
@@ -83,7 +82,6 @@
         var resume = (opts && opts.resume) || null;
         var s = scr('detail');
         U.clear(s);
-        s.appendChild(U.el('div', 'detail-hero'));
         s.appendChild(buildTopMenu('detail'));
         U.spinner(true);
         // A movie goes straight to its sources: ask for them alongside the details
@@ -202,9 +200,9 @@
         var local = (typeof LocalMedia !== 'undefined' && /^file:\/\//i.test(p.url || '')) ? LocalMedia.streamForUrl(p.url) : null;
         var how = p.fromStart ? { fromStart: true } : null;   // (Play from start: the same source, from 0:00)
         if (local) { resumeSources(startPlayback(local, p.id, p.name, how), p.id); return; }
+        if (Stremio.isRemovedSource(p)) { openStreams(p.id, p.name, false, how); return; }
         var st = { url: p.url, name: p.name, _headers: U.sanitizeHeaders(p.headers) || undefined,
             behaviorHints: (p.fileHints && typeof p.fileHints === 'object') ? p.fileHints : undefined };   // (its file: for subtitles made for it)
-        if (/^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(p.url || '')) { st._yt = true; st.ytPage = p.url; }   // (a YouTube video: through the service again)
         if (p.torrent && /^[a-f0-9]{40}$/i.test(p.torrent.infoHash || '')) { st.infoHash = p.torrent.infoHash; st.fileIdx = p.torrent.fileIdx; st.sources = p.torrent.sources; st._torrentAllowLocal = p.torrent._torrentAllowLocal === true; }
         resumeSources(startPlayback(st, p.id, p.name, how), p.id);
     }
@@ -221,6 +219,8 @@
     }
 
     function drawDetail() {
+        if (_d && V.isModalOpen()) { _d._redrawAfterModal = true; return; }
+        _d._redrawAfterModal = false;
         var s = scr('detail');
         U.clear(s);
         var meta = _d.meta;
@@ -231,17 +231,11 @@
             _d.streams = sortStreams(_d.streams);
         }
 
-        var listed = _d.mode === 'streams' || (_d.mode === 'info' && _d.type === 'series');   // (a source list, an episode list)
-        var hero = U.el('div', 'detail-hero' + (listed ? ' hero-full' : ''));   // (a list: over the whole backdrop)
-        var bg = meta.background || meta.poster;
-        if (bg) { U.deferBg(hero, U.cardImage(bg, 'hero'), true); }   // (sized for the page, first in the queue)
-        hero.appendChild(U.el('div', 'shade'));
-        s.appendChild(hero);
         s.appendChild(buildTopMenu('detail'));   // the main menu, above the title
 
         var body = U.el('div', 'detail-body');
         body.__noScroll = true;   // clipped, never scrolled: the text doesn't shift when focus reaches the buttons
-        body.appendChild(titleNode(meta));
+        body.appendChild(U.el('div', 'detail-title', meta.name || meta.title || ''));
         var ep = shownEpisode();   // (an episode's page: its sources, or its Cast & more)
         var bits = [];
         if (ep) {
@@ -336,22 +330,6 @@
         var all = s.querySelectorAll('.focusable');
         for (var i = 0; i < all.length; i++) { if (!inMenu(all[i])) { return all[i]; } }
         return undefined;
-    }
-
-    // The title as its logo (Cinemeta and others provide one), else as text.
-    function titleNode(meta) {
-        var name = meta.name || meta.title || '';
-        var t = U.el('div', 'detail-title');
-        var logo = U.cardImage(meta.logo, 'logo');   // (null unless it's a usable http(s) link)
-        if (!logo) { t.textContent = name; return t; }
-        t.className += ' has-logo';
-        var img = U.el('img', 'detail-logo');
-        // no logo after all: the name, in the logo's space (what's under it stays put)
-        img.onerror = function () { t.className = 'detail-title has-logo logo-failed'; U.clear(t); t.textContent = name; };
-        U.deferImage(img, logo, true);
-        img.setAttribute('alt', name);
-        t.appendChild(img);
-        return t;
     }
 
     // Ratings from MDBList (IMDb, Rotten Tomatoes, Metacritic, Letterboxd...), when its key is set.
@@ -563,7 +541,6 @@
         var s = scr('detail');
         U.clear(s);
         var p = _d.person;
-        s.appendChild(U.el('div', 'detail-hero'));
         s.appendChild(buildTopMenu('detail'));
         if (p && p.photo) {
             var ph = U.el('div', 'person-photo');
@@ -717,16 +694,15 @@
     // pack, or the "Downloads" folder). Series metas are left to the episode browser.
     function embeddedFiles(meta) {
         if (!meta || meta.type === 'series' || _d.type === 'series') { return []; }
-        return (meta.videos || []).filter(function (v) { return v && v.streams && v.streams.length; });
+        return (meta.videos || []).filter(function (v) { return v && v.streams && v.streams.some(function (s) { return !Stremio.isRemovedSource(s); }); });
     }
     function fileLabel(v) {
         var t = '' + (v.title || v.name || v.id || 'File');
         return t.split('/').pop();
     }
     function fileStreams(v) {
-        return v.streams.map(function (st) {
-            var s = Object.assign({ name: fileLabel(v) }, st);
-            return Stremio.youTubeSource ? Stremio.youTubeSource(s) : s;
+        return v.streams.filter(function (st) { return !Stremio.isRemovedSource(st); }).map(function (st) {
+            return Object.assign({ name: fileLabel(v) }, st);
         });
     }
 
@@ -963,6 +939,7 @@
         });
     }
     function trailerPill() {
+        if (typeof YTPlay === 'undefined') { return null; }
         // TMDB's trailers for the title (a key, an IMDb id): asked for once a page; when they come,
         // the page is drawn again with them
         var meta = _d.meta, page = _d, imdb = (meta && (meta.imdb_id || meta._imdbId)) || (/^tt\d+$/.test(_d.id || '') ? _d.id : '');
@@ -1057,8 +1034,8 @@
         return arr;
     }
 
-    // Hide spoilers (Settings › Appearance): for an episode not watched yet, 'pictures' (its still
-    // blurred) or 'all' (its synopsis left out too); '' to show it.
+    // Hide spoilers (Settings › Appearance): for an episode not watched yet, 'pictures' (hide its
+    // thumbnail) or 'all' (its synopsis left out too); '' to show it.
     var SPOILER_TEXT = 'Synopsis hidden: not watched yet';
     function spoilerFor(v) {
         var mode = Stremio.getPrefs().spoilers;
@@ -1249,9 +1226,9 @@
             e.setAttribute('data-ep', v.id);   // (a redraw keeps focus on it: redrawKeepingFocus)
 
             var hide = spoilerFor(v);   // (Hide spoilers: an episode not watched yet)
-            var thumb = U.el('div', 'ep-thumb' + (hide ? ' spoiler' : ''));
+            var thumb = U.el('div', 'ep-thumb');
             // through the poster queue: a season's thumbnails don't all download at once
-            if (v.thumbnail) { U.deferBg(thumb, U.cardImage(v.thumbnail, 'still')); }
+            if (!hide && v.thumbnail) { U.deferBg(thumb, U.cardImage(v.thumbnail, 'still')); }
             var pr = !watched && Player.progressFor(_d.collection ? 'movie' : 'series', v.id);
             if (pr && pr.duration && pr.position > 0) {   // partly watched: progress stripe
                 var stripe = U.el('div', 'ep-prog');
@@ -1280,7 +1257,7 @@
             e.__onlongpress = function () { if (_d.collection) { collectionMenu(meta, v); } else { episodeMenu(meta, v); } };
             if (_d.target && v.id === _d.target) { _d._epFocus = e; }
             listScroll.appendChild(e);
-            epRefs.push({ num: v.episode, thumb: thumb, rating: rating, ov: ov, hasThumb: !!v.thumbnail, hideOv: hide === 'all' });
+            epRefs.push({ num: v.episode, thumb: thumb, rating: rating, ov: ov, hasThumb: !!v.thumbnail, hideThumb: !!hide, hideOv: hide === 'all' });
         });
         panel.appendChild(listScroll);
 
@@ -1307,7 +1284,7 @@
                     epRefs.forEach(function (r) {
                         var ep = map[r.num];
                         if (!ep) { return; }
-                        if (ep.still && !r.hasThumb) { r.hasThumb = true; U.deferBg(r.thumb, U.cardImage(ep.still, 'still')); }
+                        if (ep.still && !r.hideThumb && !r.hasThumb) { r.hasThumb = true; U.deferBg(r.thumb, U.cardImage(ep.still, 'still')); }
                         // Fill the rating only if OMDb didn't provide one for this episode
                         // (OMDb's dataset is missing IMDb ratings for some episodes).
                         if (ep.rating && !r.rating.textContent) { r.rating.textContent = '★ ' + (Math.round(ep.rating * 10) / 10) + ' TMDb'; }
@@ -1424,11 +1401,12 @@
             var sized = (usable && !unsuitable && !worded && !st._localFile) ? sizeHit(st, info) : '';   // (outside your size limits: Settings › Source ranking)
             var bad = usable ? Stremio.badFormats(st, info) : [];
             var blocked = usable ? Stremio.blockedRes(st, info) : '';   // a resolution you don't allow
-            var pr = (usable && !unsuitable && !worded && !sized && !bad.length && !blocked) ? playedIndex(hist, st, info) : -1;
+            var incompatible = usable && !(_d && _d.live) ? Stremio.incompatibleVideo(st) : '';
+            var pr = (usable && !unsuitable && !worded && !sized && !bad.length && !blocked && !incompatible) ? playedIndex(hist, st, info) : -1;
             if (healthOn && Stremio.sourceHealth && Stremio.sourceHealth.get(st) === 'bad') { pr = -1; }
-            var group = !usable ? 'where' : unsuitable ? 'unsuitable' : worded ? 'worded' : sized ? 'sized' : (bad.length || blocked) ? 'bad' : st._localFile ? 'local' : pr >= 0 ? 'played' : byRes ? tierOf(info) : 'ranked';
+            var group = !usable ? 'where' : incompatible ? 'bad' : unsuitable ? 'unsuitable' : worded ? 'worded' : sized ? 'sized' : (bad.length || blocked) ? 'bad' : st._localFile ? 'local' : pr >= 0 ? 'played' : byRes ? tierOf(info) : 'ranked';
             var app = group === 'where' ? whereApp(st) : null;   // links that open an app here come first
-            return { st: st, i: i, info: info, bad: bad, blocked: blocked, pr: pr, group: group, tier: tierOf(info), app: app, unsuitable: unsuitable, worded: worded, sized: sized };
+            return { st: st, i: i, info: info, bad: bad, blocked: blocked, incompatible: incompatible, pr: pr, group: group, tier: tierOf(info), app: app, unsuitable: unsuitable, worded: worded, sized: sized };
         });
         rows.sort(function (a, b) {
             var ga = GROUPS.indexOf(a.group), gb = GROUPS.indexOf(b.group);
@@ -1684,7 +1662,7 @@
         }, force).then(function (list) {
             if (!here() && !Player.isActive()) { U.spinner(false); }
             show(list, 0);
-            if (auto && here() && !Player.isActive()) {   // (Skip the source list: the top one plays)
+            if (auto && here() && !Player.isActive() && !V.isModalOpen()) {   // (Skip the source list: the top one plays)
                 var top = (_d.streams && _d.streams.length) ? bestRow(rankRowsFor(_d.streams)) : null;
                 if (top) { startPlayback(top.st, videoId, label, howHere()); return; }
             }
@@ -1719,6 +1697,9 @@
             for (var i = 0; i < btns.length; i++) { if (btns[i].textContent === btnText) { Focus.setFocus(btns[i]); break; } }
         }
     }
+    V.refreshDetailAfterModal = function () {
+        if (_d && _d._redrawAfterModal && V._current() === scr('detail') && !V.isModalOpen()) { redrawKeepingFocus(); }
+    };
     function streamIdentity(st) {
         return st.url || st.externalUrl || (st.infoHash ? st.infoHash + ':' + (st.fileIdx || 0) : '') || (st._addon + '|' + Stremio.streamName(st));
     }
@@ -1751,6 +1732,12 @@
     function filterRows(rows) {
         var f = filterOf();
         return (f.addon || f.res) ? rows.filter(function (r) { return matchFilter(r, f); }) : rows;
+    }
+    function visibleRows(rows, prefs) {
+        if (_d.live) { return rows; }
+        return rows.filter(function (r) {
+            return (!prefs.hideIncompatible || !r.incompatible) && (!prefs.hideUnplayable || r.app || Stremio.isPlayable(r.st));
+        });
     }
     // [[key, label, how many]] for one button, within the other's choice
     function filterOptions(kind, rows) {
@@ -1787,7 +1774,7 @@
     }
     function streamActionsBar() {
         var row = U.el('div', 'btn-row streams-actions');
-        var allRows = (_d.streams && _d.streams.length) ? rankRowsFor(_d.streams) : [];
+        var allRows = (_d.streams && _d.streams.length) ? visibleRows(rankRowsFor(_d.streams), Stremio.getPrefs()) : [];
         // ▶ Play best: the top of the ranking (focused when the page opens), within the filter
         var best = allRows.length ? bestRow(filterRows(allRows)) : null;
         if (best) {
@@ -1857,20 +1844,15 @@
         // before, 4K, 1080p, …) starts with its heading.
         var heading = streamsHeading();
         if (heading) { listScroll.appendChild(U.el('div', 'stream-for', heading)); }
-        var list = _d.streams, keepAt = -1, rows = rankRowsFor(list), lastGroup = null;
-        // Direct links only (Settings › Source ranking): the sources the TV can't play left out
-        // (torrents, links it can't open); where-to-watch apps stay (they open)
-        if (Stremio.getPrefs().hideUnplayable && !_d.live) {
-            var keptList = [], keptRows = [];
-            list.forEach(function (st, i) {
-                var app = (rows[i] && rows[i].app !== undefined) ? rows[i].app : whereApp(st);
-                if (Stremio.isPlayable(st) || app) { keptList.push(st); keptRows.push(rows[i]); }
-            });
-            var gone = list.length - keptList.length;
-            if (gone) {
-                listScroll.appendChild(U.el('div', 'streams-hidden', gone + (gone === 1 ? ' source the TV can’t play is hidden' : ' sources the TV can’t play are hidden') + '  (Settings › Playback › Source ranking)'));
-                list = keptList; rows = keptRows;
-            }
+        var ranked = rankRowsFor(_d.streams), prefs = Stremio.getPrefs();
+        var rows = visibleRows(ranked, prefs), list = rows.map(function (r) { return r.st; }), keepAt = -1, lastGroup = null;
+        var incompatibleCount = prefs.hideIncompatible && !_d.live ? ranked.filter(function (r) { return r.incompatible; }).length : 0;
+        var unplayableCount = ranked.length - rows.length - incompatibleCount;
+        if (incompatibleCount) {
+            listScroll.appendChild(U.el('div', 'streams-hidden', incompatibleCount + (incompatibleCount === 1 ? ' incompatible video source hidden' : ' incompatible video sources hidden') + '  (Settings › Playback › Formats)'));
+        }
+        if (unplayableCount) {
+            listScroll.appendChild(U.el('div', 'streams-hidden', unplayableCount + (unplayableCount === 1 ? ' unavailable source hidden' : ' unavailable sources hidden') + '  (Settings › Playback › Source ranking)'));
         }
         // the filter (Addon ▾ / Resolution ▾): only what matches, saying so
         var flt = filterOf();
@@ -1925,6 +1907,7 @@
             if (row && row.unsuitable) { lines.push('⛔ Marked not suitable for this title  ·  hold OK to put it back'); }
             if (row && row.worded) { lines.push('🚫 Has your word “' + row.worded + '”  (Settings › Playback › Source ranking)'); }
             if (row && row.sized) { lines.push('📏 Outside your size limits: ' + row.sized + '  (Settings › Playback › Source ranking)'); }
+            if (row && row.incompatible) { lines.push('⚠ ' + row.incompatible + ' is unsupported on this TV'); }
             if (row && row.blocked) { lines.push('⚠ ' + row.blocked + ' isn’t allowed  (Settings › Playback › Formats)'); }
             if (row && row.bad.length) { lines.push('⚠ Marked “Not working” on this TV: ' + row.bad.join(', ') + '  (Settings › Playback › Formats)'); }
             if (opens) {
@@ -1997,7 +1980,8 @@
     // The player's "Select source" list: each source with the request headers it needs
     // (IPTV), so switching to it sends its own (or none).
     function playableSources(list) {
-        return (list || _d.streams || []).filter(Stremio.isPlayable).map(function (st) {
+        var hide = !(_d && _d.live) && Stremio.getPrefs().hideIncompatible;
+        return (list || _d.streams || []).filter(function (st) { return Stremio.isPlayable(st) && (!hide || !Stremio.incompatibleVideo(st)); }).map(function (st) {
             var sz = Stremio.streamSize(st);
             var desc = Stremio.streamDescription(st).replace(/\n/g, '   ');
             var dparts = [];
@@ -2265,9 +2249,10 @@
     // remembered, the first playable source (as before).
     function pickLikeLast(seriesId, list) {
         var marked = unsuitableList(seriesId);
-        var playable = (list || []).filter(function (st) { return Stremio.isPlayable(st) && !isSubscriptionStream(st) && !Stremio.badFormats(st).length && !Stremio.blockedRes(st) && marked.indexOf(fileIdentity(st)) === -1 && !(Stremio.hideWordHit && Stremio.hideWordHit(st)) && !sizeHit(st); });
-        if (!playable.length) { playable = (list || []).filter(function (st) { return Stremio.isPlayable(st) && !isSubscriptionStream(st); }); }
-        if (!playable.length) { playable = (list || []).filter(Stremio.isPlayable); }
+        var supported = (list || []).filter(function (st) { return Stremio.isPlayable(st) && !Stremio.incompatibleVideo(st); });
+        var playable = supported.filter(function (st) { return !isSubscriptionStream(st) && !Stremio.badFormats(st).length && !Stremio.blockedRes(st) && marked.indexOf(fileIdentity(st)) === -1 && !(Stremio.hideWordHit && Stremio.hideWordHit(st)) && !sizeHit(st); });
+        if (!playable.length) { playable = supported.filter(function (st) { return !isSubscriptionStream(st); }); }
+        if (!playable.length) { playable = supported; }
         if (!playable.length) { return null; }
         var last = (U.store.get(SERIES_SRC_KEY, {}) || {})[seriesId];
         if (!last) { return playable[0]; }

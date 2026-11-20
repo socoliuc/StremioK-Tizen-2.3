@@ -1,7 +1,17 @@
 # Changelog
 
-What changed in each version of StremioK, newest first. How everything works is in the
-[user guide](docs/USER-GUIDE.md).
+For this fork, see the [Tizen 2.3 playback guide](docs/PLAYBACK-TV23.md) and
+[installation guide](docs/INSTALL-TV23.md). Earlier upstream changes follow below.
+
+## 2.5.6 TV23 Preview
+
+- Simplified Home around movies, series and the library. Removed IPTV, Radio, Sports and YouTube from the TV23 navigation.
+- Reduced work during remote navigation and fixed focus when opening the episode source resolution picker.
+- Improved automatic English subtitle selection when tracks arrive late.
+- Added default filtering for clearly labeled AV1 and 10-bit H.264 sources. Filename metadata takes precedence, and ambiguous codec information stays visible.
+- Added live peer counts during torrent startup and separate messages for torrent setup and playback errors. Format learning now uses explicit format errors from the player.
+- Expanded installation, update recovery, playback and build documentation.
+- Verified launch and 1080p playback on a development build on the Samsung UE40JU6000. The downloadable widget includes source refinements made after that TV test.
 
 ## 2.2.0 — 2026-10-23
 - **A TV guide for your IPTV channels:** what's on now and next on each channel's card, in

@@ -84,6 +84,9 @@ var NativeBridge = (function () {
  function prepareTorrent(stream,cancel){
   return request({op:'prepareTorrent',infoHash:stream.infoHash,fileIdx:stream.fileIdx,sources:Array.isArray(stream.sources)?stream.sources:[],allowLocal:stream._torrentAllowLocal===true || (typeof Stremio!=='undefined' && Stremio.getPrefs && Stremio.getPrefs().allowLocal===true)},120000,cancel).then(function(r){return JSON.parse(decode(r.body));});
  }
+ function torrentStatus(cancel){
+  return request({op:'torrentStatus'},3000,cancel).then(function(r){return JSON.parse(decode(r.body));});
+ }
  function stopTorrent(){return request({op:'stopTorrent'},15000).catch(function(){});}
  function getImage(url,cancel,allowLocal){
   // This public CDN sometimes caches a WebP at its extensionless address.
@@ -91,5 +94,5 @@ var NativeBridge = (function () {
   url=String(url).replace(/^(https:\/\/images\.metahub\.space\/(?:poster|background)\/(?:small|medium|large)\/tt[0-9]+\/img)$/i,'$1?format=jpg&tv23=1');
   return getText(url,8000,2*1024*1024,cancel,{Accept:'image/jpeg,image/png,image/svg+xml,image/gif;q=0.8'},null,allowLocal,true);
  }
- return {available:function(){return !failed;},ready:ready,getText:getText,getImage:getImage,request:request,prepareTorrent:prepareTorrent,stopTorrent:stopTorrent};
+ return {available:function(){return !failed;},ready:ready,getText:getText,getImage:getImage,request:request,prepareTorrent:prepareTorrent,torrentStatus:torrentStatus,stopTorrent:stopTorrent};
 }());

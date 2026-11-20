@@ -24,22 +24,10 @@
         var why = U.urlProblem ? U.urlProblem(text) : (U.parseUrl(text) ? null : 'Not a link');
         return why ? why + ' (a link starts with https:// or http://)' : null;
     }
-    // Played as it is (nothing recorded): a YouTube video's page through StremioK's YouTube
-    // service, anything else straight to the player.
     function playLink(text) {
         var p = U.parseUrl(text);
         if (!p) { U.toast('That isn’t a link StremioK can play'); return; }
         var url = p.href, back = function () { var s = scr('search'); Focus.setScope(s, s.querySelector('.play-link') || undefined); };
-        var yt = url.match(/^https?:\/\/(?:www\.|m\.)?youtube\.com\/watch\?(?:.*&)?v=([A-Za-z0-9_-]{11})/) || url.match(/^https?:\/\/youtu\.be\/([A-Za-z0-9_-]{11})/);
-        if (yt) {
-            var page = 'https://www.youtube.com/watch?v=' + yt[1], gen = _gen;
-            YTPlay.ensureService().then(function () {
-                if (gen !== _gen) { return; }   // (Search left, or another search, meanwhile)
-                Player.play({ url: YTPlay.resolverUrl(page, 1080, false, ''), variantUrl: YTPlay.resolverUrl(page), initialQualityHeight: 1080, yt: page,
-                    type: 'movie', id: 'link:yt:' + yt[1], name: 'YouTube video', streams: [], link: true, private: true }, back);
-            }, function () { if (gen === _gen) { U.toast(YTPlay.unavailableMessage('video'), 6000); } });
-            return;
-        }
         var name = '';
         try { name = decodeURIComponent((p.path || '').split('/').pop() || ''); } catch (e) { name = ''; }
         Player.play({ url: url, type: 'movie', id: 'link:' + url.length + ':' + url.slice(-40), name: (name || p.host || 'Link').slice(0, 120), streams: [], link: true, private: true }, back);
@@ -100,7 +88,7 @@
         var link = U.el('div', 'pill focusable search-go play-link', '▶  Play a link');
         link.__onselect = function () {
             V.phoneEntry({ title: 'Play a link', what: 'link', typeTitle: 'Play a link', placeholder: 'https://…/film.mkv',
-                hint: 'A video’s direct link (an MKV or MP4 file, an HLS .m3u8) or a YouTube video’s page. It plays as it is, and nothing about it is recorded.',
+                hint: 'A video’s direct link (an MKV or MP4 file, an HLS .m3u8). It plays as it is, and nothing about it is recorded.',
                 validate: linkProblem, onText: playLink });
         };
         bar.appendChild(link);
@@ -188,7 +176,6 @@
         // answered"); the rows that are in can be browsed meanwhile. It goes when all have
         // answered, or names the ones that didn't.
         var status = U.el('div', 'search-status');
-        status.appendChild(U.el('span', 'spin spin-small'));
         var statusText = U.el('span', 'search-status-text', 'Searching “' + query + '”…');
         status.appendChild(statusText);
         results.appendChild(status);

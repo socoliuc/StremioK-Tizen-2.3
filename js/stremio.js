@@ -168,6 +168,7 @@ var Stremio = (function () {
         var p = U.store.get(PREFS_KEY, {}) || {};
         return { posterShape: p.posterShape || 'portrait', accent: p.accent || 'indigo', bg: p.bg || 'dark',
             formatsAuto: p.formatsAuto !== false,   // Settings > Formats: mark "Not working" on its own
+            hideIncompatible: p.hideIncompatible !== false,
             allowLocal: p.allowLocal === true,      // Settings > Addons: home-network links from internet addons
             addonWait: ADDON_WAITS.indexOf(p.addonWait) !== -1 ? p.addonWait : 0,   // Settings > Addons: seconds to wait for an addon (0: Normal)
             autoSkip: [5, 10, 15, 30].indexOf(p.autoSkip) !== -1 ? p.autoSkip : 0,   // Settings > Skipping: intros / recaps after a countdown (0: ask)
@@ -625,13 +626,17 @@ var Stremio = (function () {
         return t ? (t.charAt(0).toUpperCase() + t.slice(1)) : '';
     }
 
+    function supportsContent(type, id) {
+        return !/^(tv|livetv|live|iptv|guide|radio|sports?|events?|youtube|channel)$/i.test(type || '') &&
+            !/^(iptv:|ytk:|yt_id:)/i.test(id || '');
+    }
     function listCatalogs() {
         return loadAddons().then(function (addons) {
             var cats = [];
             addons.forEach(function (addon) {
                 var cs = addon.manifest.catalogs || [];
                 cs.forEach(function (c) {
-                    if (!c.type || !c.id) { return; }
+                    if (!c.type || !c.id || !supportsContent(c.type, c.id)) { return; }
                     var label = c.name || c.id;
                     // Include the type so per-type catalogs sharing a name (e.g. Cinemeta's
                     // "Popular" for both movie & series) don't look like duplicates.
@@ -864,6 +869,7 @@ var Stremio = (function () {
     // not the title, so the next addon is asked.
     function isErrorMeta(m) { return /^(aiostreamserror\.|aiom\.error\.)/.test('' + (m && m.id)); }
     function getMeta(type, id, cancel) {
+        if (!supportsContent(type, id)) { return Promise.reject(new Error('That content type is unavailable')); }
         if (/^ytk:/.test(id) && typeof YouTube !== 'undefined') {
             return YouTube.meta(id).then(function (m) { if (!m) { throw new Error('Not found on YouTube'); } return m; });
         }
@@ -928,6 +934,7 @@ var Stremio = (function () {
     function streamNotes(type, id) { return _streamNotes.get(type + ':' + id) || []; }
     var _streamCache = {}, _streamOrder = [];
     function getStreams(type, id, onUpdate, force) {
+        if (!supportsContent(type, id)) { if (onUpdate) { onUpdate([], 0); } return Promise.resolve([]); }
         if (/^ytk:/.test(id) && typeof YouTube !== 'undefined') {
             return YouTube.streams(id).then(function (l) { l = l.map(youTubeSource); l.forEach(function (s) { s._addon = 'YouTube'; }); if (onUpdate) { onUpdate(l, 0); } return l; });
         }
@@ -968,7 +975,7 @@ var Stremio = (function () {
                     return function () {
                         var url = a.base + '/stream/' + encodeURIComponent(type) + '/' + encodeURIComponent(id) + '.json';
                         return U.getJSON(url, addonMs(15000)).then(function (res) {
-                            var arr = U.listOf(fromAddon(a, res, 'sources').streams, MAX_STREAMS).map(youTubeSource), said = notes.length;
+                            var arr = U.listOf(fromAddon(a, res, 'sources').streams, MAX_STREAMS).filter(function (s) { return !isRemovedSource(s); }), said = notes.length;
                             arr = arr.filter(function (s) {   // (an addon's notices: what it removed and why, its errors; not sources)
                                 if (!isNotice(s)) { return true; }
                                 notes.push({ addon: a.manifest.name || 'Addon', title: ('' + (s.name || '')).replace(/\s+/g, ' ').trim().slice(0, 120),
@@ -1782,7 +1789,7 @@ var Stremio = (function () {
             var out = [];
             addons.forEach(function (addon) {
                 (addon.manifest.catalogs || []).forEach(function (c) {
-                    if (!c.type || !c.id) { return; }
+                    if (!c.type || !c.id || !supportsContent(c.type, c.id)) { return; }
                     var searchable = false;
                     if (c.extra && c.extra.length) {
                         searchable = c.extra.some(function (e) { return e && e.name === 'search'; });
@@ -1844,7 +1851,14 @@ var Stremio = (function () {
     }
 
     // HTTP streams and BitTorrent v1 sources are supported by the TV-native engine.
+    function isRemovedSource(s) {
+        if (!s) { return false; }
+        if (s._yt || (s.ytId && !s.url && !s.infoHash)) { return true; }
+        var target = U.parseUrl(s.url || s.externalUrl);
+        return !!(target && /^(?:[a-z0-9-]+[.])*(?:youtube[.]com|youtu[.]be)$/i.test(target.host));
+    }
     function isPlayable(stream) {
+        if (isRemovedSource(stream)) { return false; }
         if (typeof LocalMedia !== 'undefined' && LocalMedia.isLocalStream(stream)) { return true; }   // (a file on a USB drive: only one StremioK made)
         return !!(stream && ((typeof stream.url === 'string' && /^https?:\/\//i.test(stream.url)) ||
             (/^[a-f0-9]{40}$/i.test(stream.infoHash || '') && typeof NativeBridge !== 'undefined' && NativeBridge.available())));
@@ -1896,7 +1910,9 @@ var Stremio = (function () {
     var RX = {
         r2160: tok('2160p|4k|uhd'), r1440: tok('1440p'), r1080: tok('1080p|1080i'), r720: tok('720p'), r480: tok('576p|480p|360p|sd|dvdrip|dvd'),
         dv: tok('dv|dovi|dolby[ ._-]?vision'), hdr10p: /hdr10(\+|plus|p)/i, hdr: tok('hdr10|hdr|hlg'),
-        av1: tok('av1'), hevc: tok('hevc|h[ .]?265|x265'), h264: tok('avc|h[ .]?264|x264'), bits10: tok('10[ ._-]?bit|hi10p'),
+        av1: tok('av1|av01'), hevc: tok('hevc|hvc1|hev1|h[ .]?265|x265'), h264: tok('avc|avc1|h[ .]?264|x264'), bits10: tok('10[ ._-]?bit|hi10p'),
+        hi10p: tok('hi10p|high[ ._-]+10'), bits8: tok('8[ ._-]?bit'),
+        otherVideo: tok('vp0?[89]|mpeg[ ._-]?[124]|mp4v|vc[ ._-]?1|wvc1|wmv[123]?|xvid|divx|dx50|mjpeg|mjpg|h[ .]?263|s263'),
         atmos: tok('atmos'), truehd: tok('truehd|true[ ._-]hd'), dtshd: tok('dts[ ._-]?hd|dts[ ._-]?x|dts[ ._-]?ma|dts:x'), dts: tok('dts'),
         eac3: /(^|[^a-z0-9])(eac3|e-ac-3|ddp|dd\+|dolby digital plus)/i, ac3: tok('ac3|dd5[ .]?1|dd2[ .]?0|dd'), aac: tok('aac'), opus: tok('opus'), flac: tok('flac'),
         remux: tok('remux'), bluray: tok('blu[ ._-]?ray|bdrip|brrip|bdremux'), web: tok('web[ ._-]?dl|webrip|web'), hdtv: tok('hdtv|pdtv'),
@@ -1933,6 +1949,34 @@ var Stremio = (function () {
         var ext = t.match(/\.(mkv|mp4|m4v|avi|webm|ts|m3u8)(?=\s|$)/im);
         i.container = ext ? (ext[1].toLowerCase() === 'm3u8' ? 'hls' : ext[1].toLowerCase() === 'm4v' ? 'mp4' : ext[1].toLowerCase()) : '';
         return i;
+    }
+
+    function videoCodecHint(text) {
+        var av1 = RX.av1.test(text), hevc = RX.hevc.test(text), h264 = RX.h264.test(text) || RX.hi10p.test(text);
+        var other = RX.otherVideo.test(text);
+        if (Number(av1) + Number(hevc) + Number(h264) + Number(other) > 1) { return 'mixed'; }
+        if (other) { return 'other'; }
+        return av1 ? 'av1' : hevc ? 'hevc' : h264 ? 'h264' : '';
+    }
+    function videoDepthHint(text) {
+        var bits8 = RX.bits8.test(text), bits10 = RX.bits10.test(text) || RX.hi10p.test(text);
+        return bits8 ? (bits10 ? -1 : 8) : bits10 ? 10 : 0;
+    }
+    // A concrete filename takes precedence over a URL or addon label. Unknown and mixed
+    // metadata stays visible unless it provides an unambiguous incompatible video hint.
+    function incompatibleVideo(stream) {
+        var filename = (stream.behaviorHints || {}).filename || '';
+        var urlPath = /^https?:\/\/[^/?#]+\/([^?#]*)/i.exec(stream.url || '');
+        var path = urlPath ? urlPath[1].split('/').pop() : '';
+        try { path = decodeURIComponent(path); } catch (e) {}
+        var labels = [stream.name, stream.title, stream.description].join('\n');
+        var pathCodec = videoCodecHint(path), labelCodec = videoCodecHint(labels);
+        var codec = videoCodecHint(filename) || pathCodec || labelCodec;
+        if (codec === 'av1') { return 'AV1 video'; }
+        if (codec !== 'h264') { return ''; }
+        var depth = videoDepthHint(filename) || (!pathCodec || pathCodec === 'h264' ? videoDepthHint(path) : 0) ||
+            (labelCodec === 'h264' ? videoDepthHint(labels) : 0);
+        return depth === 10 ? '10-bit H.264 video' : '';
     }
 
     // ---- Formats: what plays on this TV (Settings > Formats) ----
@@ -2003,8 +2047,10 @@ var Stremio = (function () {
         return k;
     }
     var BLAMED = /^[pac]:/;   // what a failed start can be blamed on (see above)
-    // A failure that says nothing about the format: the link, the server or the network.
-    var NOT_FORMAT = /CONNECTION|NETWORK|DISCONNECT|INVALID_URI|TIMEOUT|TIMED_OUT|HTTP/i;
+    // Only an explicit AVPlay format rejection is evidence against a format.
+    function isFormatError(err) {
+        return /^PLAYER_ERROR_(?:NOT_SUPPORTED_(?:FILE|FORMAT)|(?:AUDIO|VIDEO)_CODEC_NOT_SUPPORTED)$/.test(err || '');
+    }
     function formatsAll() { return U.store.get(FORMATS_KEY, {}) || {}; }
     function formatStatus(key, all) {
         var f = (all || formatsAll())[key];
@@ -2018,7 +2064,7 @@ var Stremio = (function () {
     // off, failures aren't recorded (what's known stays; what plays still counts).
     function recordFormats(keys, started, err, file) {
         if (!keys || !keys.length) { return; }
-        if (!started && (!getPrefs().formatsAuto || (err && NOT_FORMAT.test('' + err)))) { return; }
+        if (!started && (!getPrefs().formatsAuto || !isFormatError(err))) { return; }
         var all = formatsAll(), now = Date.now();
         var suspects = started ? [] : keys.filter(function (k) { return BLAMED.test(k) && formatStatus(k, all) !== 'ok'; });
         keys.forEach(function (k) {
@@ -2108,10 +2154,12 @@ var Stremio = (function () {
         isSearchFeedHidden: function (key) { return searchFeeds.isHidden(key); },
         isPlayable: isPlayable, youTubeSource: youTubeSource, streamLabel: streamLabel, streamName: streamName,
         streamSize: streamSize, streamDescription: streamDescription,
-        streamInfo: streamInfo, formatTags: formatTags, formatKeys: formatKeys, recordFormats: recordFormats, setFormat: setFormat,
+        streamInfo: streamInfo, incompatibleVideo: incompatibleVideo, isFormatError: isFormatError,
+        formatTags: formatTags, formatKeys: formatKeys, recordFormats: recordFormats, setFormat: setFormat,
         resetFormats: resetFormats, badFormats: badFormats, formatList: formatList,
         resList: resList, setResAllowed: setResAllowed, blockedRes: blockedRes,
         importSetupList: importSetupList, savedManifest: savedManifest, isAddonOff: isAddonOff, setAddonOff: setAddonOff, onIptvReady: onIptvReady, streamListenerCount: function (type, id) { var e = _streamCache[type + ':' + id]; return e ? e.listeners.length : 0; },
+        supportsContent: supportsContent, isRemovedSource: isRemovedSource,
         iptvGetPlaylists: iptvGetPlaylists, iptvAddPlaylist: iptvAddPlaylist,
         iptvUpdatePlaylist: iptvUpdatePlaylist, iptvRemovePlaylist: iptvRemovePlaylist,
         iptvRenamePlaylist: iptvRenamePlaylist, iptvSetPlaylistGuide: iptvSetPlaylistGuide, iptvAddXtream: iptvAddXtream, iptvSetXtreamFormat: iptvSetXtreamFormat, iptvSetPlaylistOff: iptvSetPlaylistOff, iptvMovePlaylist: iptvMovePlaylist, iptvLabel: iptvLabel,

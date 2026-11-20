@@ -82,20 +82,28 @@
         // after the addons answer): one that's your remembered choice or default language starts
         // at once. The addons' join them when they come; what's showing (or what you chose
         // meanwhile) is kept.
-        var localSubs = ctx.localSubs || [], early = false;
+        var localSubs = ctx.localSubs || [], earlyPending = false, allTracks = null, failedEarly = [];
         // Any source of a movie / an episode (not the drive's own file): the subtitle files on a USB
         // drive for that title too, after the addons' (the alternative you pick: LocalMedia.subsForTitle)
         var usbSubs = (!local && !ctx.trailer && !ctx.yt && typeof LocalMedia !== 'undefined' && LocalMedia.subsForTitle && LocalMedia.present && LocalMedia.present() &&
             (ctx.type === 'movie' || ctx.type === 'series') && /^tt\d+/.test('' + ctx.id))
             ? LocalMedia.ensure().then(function () { return LocalMedia.ready(); }).then(function () { return LocalMedia.subsForTitle(ctx.type, ctx.id); }).then(null, function () { return []; })
             : Promise.resolve([]);
-        if (localSubs.length) { localReady.then(function () { early = pickSubs(localSubs, true); }); }
-        Promise.all([fromAddons, fromYouTube, localReady, usbSubs]).then(function (r) {
-            var all = localSubs.concat(ctx.sourceSubs || [], r[0] || [], r[1], r[3] || []);   // (a source's own: made for its file, so first after a USB file's)
-            if (!S.active || S.ctx !== ctx) { return; }   // (another playback started meanwhile: not its tracks)
-            if (early || _subOn || _embSub != null) { _subTracks = all; updateHint(); startSecond(); return; }
-            pickSubs(all, false);
+        function finishFull() {
+            if (!allTracks || !S.active || S.ctx !== ctx) { return; }
+            _subTracks = allTracks;
+            updateHint();
+            if (earlyPending) { return; }
+            var tracks = allTracks;
+            allTracks = null;
+            if (!_subOn && _embSub == null) { pickSubs(tracks, false); }
             startSecond();
+        }
+        function earlyFinished() { earlyPending = false; finishFull(); }
+        if (localSubs.length) { localReady.then(function () { pickSubs(localSubs, true); }); }
+        Promise.all([fromAddons, fromYouTube, localReady, usbSubs]).then(function (r) {
+            allTracks = localSubs.concat(ctx.sourceSubs || [], r[0] || [], r[1], r[3] || []);
+            finishFull();
         });
         // Choose a track: your remembered one for this title, else your default language (else one
         // built into the file). partial: only these tracks so far (the subtitle files) — nothing
@@ -104,6 +112,7 @@
             if (!S.active || S.ctx !== ctx) { return false; }
             if (partial && (_subOn || _embSub != null)) { return false; }
             _subTracks = tracks || [];
+            var available = _subTracks.filter(function (t) { return failedEarly.indexOf(t.url) === -1; });
             updateHint();
 
             // 1) A remembered choice for this exact title wins: an addon track (subtitle id,
@@ -116,13 +125,17 @@
                     wantEmbedded({ index: mem.index, lang: mem.lang, nth: mem.nth }); _embDelay = Math.max(0, +mem.delay || 0); return true;
                 }
                 var exact =
-                    (mem.trackId != null ? _subTracks.find(function (t) { return t.id === mem.trackId; }) : null) ||
-                    (mem.url ? _subTracks.find(function (t) { return t.url === mem.url; }) : null);
+                    (mem.trackId != null ? available.find(function (t) { return t.id === mem.trackId; }) : null) ||
+                    (mem.url ? available.find(function (t) { return t.url === mem.url; }) : null);
                 var remembered = exact ||
-                    (mem.lang ? _subTracks.find(function (t) { return langKey(t.lang) === langKey(mem.lang); }) : null);
+                    (mem.lang ? available.find(function (t) { return langKey(t.lang) === langKey(mem.lang); }) : null);
                 if (remembered) {
                     // the timing adjustment belongs to that exact file
-                    loadTrack(remembered, function () { if (exact && mem.delay) { _subDelay = mem.delay; renderSubs(); } });
+                    if (partial) { earlyPending = true; }
+                    loadTrack(remembered, function () {
+                        if (exact && mem.delay) { _subDelay = mem.delay; renderSubs(); }
+                        if (partial) { earlyFinished(); }
+                    }, partial ? function () { failedEarly.push(remembered.url); earlyFinished(); } : null);
                     return true;
                 }
                 if (partial) { return false; }
@@ -134,10 +147,21 @@
             var cfg = getSubCfg();
             if (!cfg.lang || cfg.lang === 'off') { return !partial; }
             // "spa" also matches "es", "es-419", "Spanish", "Español"...
-            var match = _subTracks.find(function (t) { return langMatches(cfg.lang, t.lang); });
-            if (match) { loadTrack(match); return true; }
+            var want = { lang: cfg.lang, lang2: (cfg.lang2 && cfg.lang2 !== 'none' && cfg.lang2 !== cfg.lang) ? cfg.lang2 : null };
+            var matches = available.filter(function (t) { return langMatches(cfg.lang, t.lang); }).slice(0, 3);
+            function tryTrack(i) {
+                if (i < matches.length) {
+                    loadTrack(matches[i], partial ? earlyFinished : null, function () {
+                        if (partial) { failedEarly.push(matches[i].url); }
+                        tryTrack(i + 1);
+                    });
+                }
+                else if (partial) { earlyFinished(); }
+                else { wantEmbedded(want); }
+            }
+            if (matches.length) { if (partial) { earlyPending = true; } tryTrack(0); return true; }
             if (partial) { return false; }
-            wantEmbedded({ lang: cfg.lang, lang2: (cfg.lang2 && cfg.lang2 !== 'none' && cfg.lang2 !== cfg.lang) ? cfg.lang2 : null });
+            wantEmbedded(want);
             return true;
         }
     }
@@ -170,7 +194,10 @@
     }
     // The attempt reports play time: built-in tracks can be switched now.
     function subsOnTick() {
-        if (!_ticked) { _ticked = true; if (_embWant) { try { applyEmbeddedWant(); } catch (eS) {} } }
+        _ticked = true;
+        if (_embWant && (!_embWant.retryAt || Date.now() >= _embWant.retryAt)) {
+            try { applyEmbeddedWant(); } catch (eS) {}
+        }
         if (_embNudge && Date.now() >= _embNudge.at && !S.buffering && S.pendingSeek == null) { try { nudgeEmbedded(); } catch (eN) {} }
     }
     // A built-in track picked on its own when playback starts (remembered, or your language)
@@ -285,22 +312,24 @@
     // Each choice (a track, Off, a built-in one) is a new one: a download still on its way
     // for an earlier choice is dropped when it comes, without a word (_subGen).
     var _subGen = 0;
-    function loadTrack(track, onDone) {
-        if (!U.parseUrl(track.url)) { U.toast('That subtitle track has no usable link'); return; }   // (http(s) only)
+    function loadTrack(track, onDone, onFailure) {
+        _embWant = null;
+        function fail(message) { if (onFailure) { onFailure(); } else { U.toast(message); } }
+        if (!U.parseUrl(track.url)) { fail('That subtitle track has no usable link'); return; }   // (http(s) only)
         U.toast('Loading subtitles…', 1500);
         var forCtx = S.ctx, gen = ++_subGen;
         function stale() { return !S.active || S.ctx !== forCtx || gen !== _subGen; }   // (another playback, or another choice, meanwhile)
         U.getText(track.url, 15000, undefined, null, false, track.headers || null).then(function (text) {   // (a USB file's: the service's header where there's no token)
             if (stale()) { return; }
             var cues = parseCues(text);
-            if (!cues.length) { U.toast('Could not parse subtitles'); return; }
+            if (!cues.length) { fail('Could not parse subtitles'); return; }
             embOff();   // an addon track replaces a built-in one
             _cues = cues; _cueIdx = 0; _cueT = 0; _subOn = true; _subLabel = track.lang || 'on'; _subTrackUrl = track.url;
             _subTrackId = (track.id != null) ? track.id : null; _subDelay = 0;
             renderSubs();
             U.toast('Subtitles: ' + (track.lang || 'on'));
             if (onDone) { onDone(); }
-        }, function () { if (!stale()) { U.toast('Failed to download subtitles'); } });
+        }, function () { if (!stale()) { fail('Failed to download subtitles'); } });
     }
 
     // ---------- the second subtitle ----------
@@ -375,6 +404,7 @@
 
     function subsOff() {
         _subGen++;
+        _embWant = null;
         _subOn = false; _cues = null; _subLabel = ''; _subTrackUrl = ''; _subTrackId = null; _subDelay = 0;
         embOff();
         S.subsEl.className = 'hidden'; U.clear(S.subsEl);
@@ -405,6 +435,12 @@
         }
         if (!pick && key) { pick = tracks.find(function (t) { return langMatches(key, textLang(t)); }) || null; }
         if (!pick && w.nth != null && S.ctx && S.ctx._relayCc) { pick = tracks[w.nth] || null; }   // (a live channel's closed captions: in the order asked for)
+        // Older AVPlay can expose the preferred text track after the first track list.
+        if (useAV && !pick && (key || w.index != null)) {
+            var now = Date.now();
+            if (!w.until) { w.until = now + 6000; }
+            if (now < w.until) { w.retryAt = now + 500; _embWant = w; return; }
+        }
         if (!pick && w.lang2) {   // nothing in the default language anywhere: the second choice, a track to download first
             var key2 = langKey(w.lang2);
             var dl = _subTracks.find(function (t) { return langMatches(key2, t.lang); });
@@ -412,6 +448,7 @@
             pick = tracks.find(function (t) { return langMatches(key2, textLang(t)); }) || null;
         }
         if (pick) { selectEmbeddedSub(pick); _embNudge = { index: pick.index, at: Date.now() + EMB_NUDGE_MS }; }
+
     }
     function selectEmbeddedSub(tr) {
         subsOff();   // addon subtitles (and any other built-in track) off

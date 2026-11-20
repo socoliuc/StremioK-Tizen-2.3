@@ -41,10 +41,8 @@ css/tv23-cinema.css
 js/account-history.js
 js/app.js
 js/downloads.js
-js/epg.js
 js/focus.js
 js/hubpreview.js
-js/iptv.js
 js/keys.js
 js/local.js
 js/native-bridge.js
@@ -74,10 +72,7 @@ js/util.js
 js/view-core.js
 js/view-detail.js
 js/view-discover.js
-js/view-guide.js
 js/view-home.js
 js/view-search.js
 js/view-settings.js
 js/views.js
-js/youtube.js
-js/ytplay.js

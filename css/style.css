@@ -49,7 +49,6 @@ html.tv23-video, html.tv23-video body, html.tv23-video #av-player { background: 
 .rows { position: absolute; top: 110px; left: 0; right: 0; bottom: 0; overflow: hidden; }
 .row { margin: 0 0 16px 0; }
 .row-title { font-size: 26px; font-weight: bold; margin: 0 0 8px 60px; color: #c7cbd4; }
-/* vertical padding leaves room for the scaled focus ring (overflow clips the rest) */
 .row-scroller { white-space: nowrap; padding: 26px 60px; overflow: hidden; }
 
 /* --- Cards --- */
@@ -67,23 +66,14 @@ html.tv23-video, html.tv23-video body, html.tv23-video #av-player { background: 
 }
 .card .poster { width: 100%; height: 100%; display: block; background-size: cover; background-position: center; }
 .card .fallback { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; height: 100%; padding: 10px; font-size: 20px; color: #8b93a5; text-align: center; white-space: normal; }
-.card .cap { position: absolute; bottom: 0; left: 0; right: 0; padding: 26px 10px 8px 10px; font-size: 18px; background: linear-gradient(transparent, rgba(0,0,0,0.85)); white-space: normal; line-height: 1.2; max-height: 70px; overflow: hidden; }
+.card .cap { position: absolute; bottom: 0; left: 0; right: 0; padding: 26px 10px 8px 10px; font-size: 18px; background: rgba(0,0,0,0.85); white-space: normal; line-height: 1.2; max-height: 70px; overflow: hidden; }
 .card .prog { position: absolute; bottom: 0; left: 0; height: 6px; background: #818cf8; }
 
 /* --- Focus state (TV) --- */
 .focusable.focused { border-color: #a5b4fc; box-shadow: 0 0 0 3px rgba(129,140,248,0.85); }
 
-/* Carousel cards: bold, obvious focus — white inner border + indigo ring + lift.
-   No blurred drop shadow: a large blur is repainted on every D-pad move and is
-   expensive on older TV GPUs; the ring + scale carry the focus on their own. */
-.card.focusable.focused {
-    border-color: #ffffff;
-    box-shadow: 0 0 0 5px #6366f1;
-    -webkit-transform: scale(1.09);
-            transform: scale(1.09);
-    z-index: 5;
-}
-.card.focusable.moving { border-color: #ffffff; box-shadow: 0 0 0 5px #f59e0b; -webkit-transform: scale(1.09); transform: scale(1.09); z-index: 6; }
+.card.focusable.focused { border-color: #fff; box-shadow: none; }
+.card.focusable.moving { border-color: #f59e0b; }
 
 /* Filled selection for list rows / buttons */
 .pill.focusable.focused, .stream.focusable.focused, .ep.focusable.focused { background: #818cf8; color: #0e1117; }
@@ -93,15 +83,8 @@ html.tv23-video, html.tv23-video body, html.tv23-video #av-player { background: 
 
 
 /* --- Detail screen --- */
-.detail-hero { position: absolute; top: 0; left: 0; right: 0; height: 620px; background-size: cover; background-position: center top; }
-.detail-hero .shade { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(90deg, rgba(14,17,23,0.96) 30%, rgba(14,17,23,0.35) 100%), linear-gradient(0deg, #0e1117 4%, transparent 40%); }
-/* The source and episode lists: the backdrop over the whole screen, shaded lighter, the rows
-   see-through (a focused one stays solid) */
-.detail-hero.hero-full { height: 1080px; }
-.detail-hero.hero-full .shade { background: linear-gradient(90deg, rgba(14,17,23,0.9) 22%, rgba(14,17,23,0.4) 100%), linear-gradient(0deg, rgba(14,17,23,0.5) 0%, transparent 45%); }
-.streams-panel .stream, .list-panel .ep { background: rgba(22,27,38,0.7); }
-.streams-panel .stream-group, .streams-panel .stream-for, .streams-panel .streams-hidden { text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,0.6); }
-#screen-detail .header { position: relative; z-index: 3; }   /* the main menu, over the backdrop */
+.streams-panel .stream, .list-panel .ep { background: #161b26; }
+#screen-detail .header { position: relative; z-index: 3; }
 /* the block spans the screen so a row of buttons never wraps (the TV's font is wider than
    desktop Arial); the text inside keeps a readable measure */
 .detail-body { position: absolute; top: 150px; left: 60px; right: 60px; }   /* below the top menu */
@@ -248,7 +231,6 @@ html.tv23-video, html.tv23-video body, html.tv23-video #av-player { background: 
 .search-empty { font-size: 24px; color: #8b93a5; margin-top: 30px; }
 /* while a search's sources answer (and, after, the ones that didn't) */
 .search-status { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin: 0 0 10px 24px; font-size: 22px; color: #8b93a5; min-height: 34px; }
-.search-status .spin-small { width: 22px; height: 22px; border-width: 4px; margin-right: 14px; -webkit-flex: 0 0 auto; flex: 0 0 auto; }
 .search-status-warn { color: #f0a5a5; }
 .search-recent { position: absolute; top: 96px; right: 0; width: 216px; bottom: 0; overflow: hidden; padding: 22px 4px 0 4px; }
 .recent-title { font-size: 18px; color: #8b93a5; margin-bottom: 12px; }
@@ -369,11 +351,7 @@ html.tv23-video, html.tv23-video body, html.tv23-video #av-player { background: 
 #hold-hint { position: absolute; right: 36px; bottom: 20px; z-index: 20; font-size: 17px; color: #c7cbd4; background: rgba(0,0,0,0.6); padding: 6px 14px; border-radius: 16px; pointer-events: none; }
 #toast { position: absolute; bottom: 60px; left: 50%; margin-left: -300px; width: 600px; text-align: center; z-index: 40; background: rgba(0,0,0,0.85); padding: 18px 24px; border-radius: 10px; font-size: 22px; }
 #spinner { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; z-index: 50; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; background: rgba(0,0,0,0.3); }
-/* status line under the spinner ("Opening stream at 1080p…"); empty when unused */
-#spinner-msg { margin-top: 26px; font-size: 28px; color: #fff; text-shadow: 0 2px 6px #000; text-align: center; }
-.spin { width: 70px; height: 70px; border: 7px solid rgba(255,255,255,0.2); border-top-color: #818cf8; border-radius: 50%; -webkit-animation: sp 0.9s linear infinite; animation: sp 0.9s linear infinite; }
-@-webkit-keyframes sp { to { -webkit-transform: rotate(360deg); } }
-@keyframes sp { to { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
+#spinner-msg { padding: 14px 22px; background: #151515; font-size: 28px; color: #fff; text-align: center; }
 
 /* Home top row: tab pills + Search + Settings on the left, StremioK logo on the right */
 .home-header .tabbar-inline { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
@@ -403,16 +381,9 @@ html.tv23-video, html.tv23-video body, html.tv23-video #av-player { background: 
 /* --- Appearance: color swatch in the accent picker --- */
 .pick-item .swatch { display: inline-block; width: 24px; height: 24px; border-radius: 12px; margin-right: 16px; vertical-align: middle; border: 2px solid rgba(255,255,255,0.35); }
 
-/* --- Title logos (instead of the title as text) --- */
-.detail-title.has-logo { height: 84px; margin-bottom: 14px; }
-.detail-logo { display: block; max-height: 84px; max-width: 560px; }
-.series-body .detail-title.has-logo { height: 64px; margin-bottom: 8px; }
+/* --- Compact title spacing --- */
 .series-body .detail-meta { margin-bottom: 12px; }   /* (tighter: headroom for the TV's taller font above the buttons) */
-.series-body .detail-logo { max-height: 64px; }
-.detail-title.logo-failed { line-height: 84px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 1400px; }
-.series-body .detail-title.logo-failed { line-height: 64px; }
 .home-info-title { height: 36px; }
-.home-info-logo { display: block; max-height: 36px; max-width: 520px; }
 
 /* --- Ratings from MDBList --- */
 .detail-ratings { font-size: 21px; line-height: 26px; height: 26px; color: #ffd257; margin: -6px 0 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 1400px; }
@@ -496,8 +467,6 @@ html.tv23-video, html.tv23-video body, html.tv23-video #av-player { background: 
 .card.local-folder .fallback { font-size: 24px; color: #c9cfdb; }
 .card.local-video .fallback { font-size: 18px; word-break: break-word; }
 
-/* Hide spoilers: an unwatched episode's still, blurred */
-.ep-thumb.spoiler { -webkit-filter: blur(14px); filter: blur(14px); }
 /* Direct links only: how many sources were left out */
 .streams-hidden { font-size: 20px; color: #9aa3b5; margin: 4px 0 12px; }
 /* Continue on phone: the QR in the player's menu */
@@ -537,9 +506,5 @@ html.tv23-video, html.tv23-video body, html.tv23-video #av-player { background: 
 .guide-prog.focusable.focused { background: #818cf8; color: #0e1117; border-color: #fff; }
 .guide-nowline { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #f87171; }
 .guide-ch-logo { height: 34px; max-width: 56px; margin-right: 10px; vertical-align: middle; object-fit: contain; }
-/* a program's picture (the TV guide), at the strip's right; its text kept clear of it */
-.home-info-pic { position: absolute; right: 16px; top: 50%; height: 118px; width: 210px; margin-top: -59px; object-fit: cover; border-radius: 8px; }
-.home-info.has-pic { padding-right: 240px; }
-.home-info-pic.hidden { display: none; }
 #osd-clock { position: fixed; top: 40px; right: 60px; font-size: 34px; font-weight: bold; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.9); }   /* (the time of day, top right, while the bar shows) */
 #osd-clock:empty { display: none; }

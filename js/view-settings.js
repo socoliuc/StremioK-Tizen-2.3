@@ -241,10 +241,15 @@
             wrap.appendChild(r);
             return r;
         }
+        var hide = Stremio.getPrefs().hideIncompatible;
+        row('compatible', 'Hide incompatible sources:  ' + (hide ? 'On' : 'Off'),
+            'Filters sources labelled AV1 or 10-bit H.264   ·   OK to ' + (hide ? 'show them' : 'hide them'),
+            'format-' + (hide ? 'ok' : 'unknown'), function () { Stremio.setPref('hideIncompatible', !hide); });
+
         // automatic "Not working" (what's already known stays either way)
         var auto = Stremio.getPrefs().formatsAuto;
         row('auto', 'Mark “Not working” automatically:  ' + (auto ? 'On' : 'Off'),
-            auto ? 'Formats that keep failing to start are marked Not working   ·   OK to turn off'
+            auto ? 'Learns from format errors reported by the TV player   ·   OK to turn off'
                  : 'Failures aren’t recorded; what’s marked stays, and what plays still counts   ·   OK to turn on',
             'format-' + (auto ? 'ok' : 'unknown'), function () { Stremio.setPref('formatsAuto', !auto); });
 
@@ -315,11 +320,11 @@
         content: { title: 'Content', rows: [
             ['Addons', 'Catalog, stream & subtitle addons', 'addons'],
             ['Integrations', 'API keys (OMDb, TMDB, MDBList), where-to-watch country', 'integrations'],
-            ['IPTV', 'Manage M3U playlist URLs', 'iptv'],
-            ['YouTube', 'Your YouTube channels, playlists and searches; YouTube in Search', 'youtube'],
+
+
             ['Streaming apps', 'Your apps (Prime Video, Netflix, …) that open a title\'s "where to watch" sources', 'appshortcuts'],
             ['USB drive', 'The Local tab: what\'s on your drive, matched to titles; hidden files', 'usb'],
-            ['Import configuration file', 'Import addons, API keys & IPTV playlists', 'import']] },
+            ['Import configuration file', 'Import addons and API keys', 'import']] },
         playback: { title: 'Playback', rows: [
             ['Audio', 'Preferred and second-choice audio language', 'audio'],
             ['Subtitles', 'Default language, size, color, background, position, font', 'subtitles'],
@@ -361,8 +366,6 @@
         s.appendChild(wrap);
         if (_settingsSection === 'account') { settingsAccount(wrap); }
         else if (_settingsSection === 'addons') { settingsAddons(wrap); }
-        else if (_settingsSection === 'iptv') { settingsIptv(wrap); }
-        else if (_settingsSection === 'youtube') { settingsYouTube(wrap); }
         else if (_settingsSection === 'integrations') { settingsIntegrations(wrap); }
         else if (_settingsSection === 'audio') { settingsAudio(wrap); }
         else if (_settingsSection === 'subtitles') { settingsSubtitles(wrap); }
@@ -423,7 +426,7 @@
         wrap.appendChild(U.el('h2', null, 'Settings'));
         var account = typeof StremioAccount !== 'undefined' && StremioAccount.profile();
         wrap.appendChild(sectionRow('Stremio account', account ? 'Connected: ' + account.label : 'Sign in with a QR code · your library and account addons on this TV', 'account'));
-        wrap.appendChild(sectionRow('Content', 'Addons, API keys, IPTV playlists, streaming apps, importing a configuration file', 'content'));
+        wrap.appendChild(sectionRow('Content', 'Addons, API keys, streaming apps and importing a configuration file', 'content'));
         wrap.appendChild(sectionRow('Playback', 'Audio and subtitles, source ranking, feed sources, formats', 'playback'));
         wrap.appendChild(sectionRow('Appearance', 'Background, accent color, poster orientation, Home feeds, Search results', 'appearance'));
         wrap.appendChild(sectionRow('Diagnostics', 'Logs, storage, installed apps; how StremioK was installed', 'diagnostics'));
@@ -682,7 +685,7 @@
             });
             action('Sign out of this TV', 'Clears this TV’s account session and library cache. Installed addons and local playback history stay on the TV.', function () { StremioAccount.disconnect(); markHomeDirty(); redraw(); });
         }
-        wrap.appendChild(U.el('div', 'hint', 'Your library appears on Home; account progress appears in Watching and watched episodes are marked. Calendar shows the last account viewing per title. Newer TV progress stays intact. This sync only reads the account and never writes cloud history. No PC or phone is needed after sign-in.'));
+        wrap.appendChild(U.el('div', 'hint', 'Your library appears on Home; account progress appears under Library and watched episodes are marked. Calendar shows the last account viewing per title. Newer TV progress stays intact. This sync only reads the account and never writes cloud history. No PC or phone is needed after sign-in.'));
         focusSettings();
     }
     function shortHost(u) { var p = U.parseUrl(u); return p ? p.host : ''; }
@@ -840,11 +843,11 @@
         ln.appendChild(originBadge('config'));
         listRow.appendChild(ln);
         listRow.appendChild(U.el('div', 'a-url', lastUrl ? ('Last used: ' + lastUrl + '  ·  OK to import again')
-            : 'Addon URLs, API keys and IPTV playlist URLs'));
+            : 'Addon URLs and API keys'));
         listRow.__onselect = function () {
             App.openEntry({
                 title: 'Import configuration file', phone: 'config',
-                hint: 'Enter a text-file URL containing one addon URL, API key or M3U/M3U8 playlist URL per line. Lines starting with # are ignored. The URL is remembered for next time.',
+                hint: 'Enter a text-file URL containing one addon URL or API key per line. Lines starting with # are ignored. The URL is remembered for next time.',
                 value: lastUrl || 'https://', placeholder: 'https://example.com/stremiok.txt',
                 validate: function (v) { return U.urlProblem(v) || null; },   // (U.parseUrl: http(s), a real host, no user:password@)
                 onConfirm: function (v) {
@@ -858,6 +861,7 @@
                     function here() { return mine === _importGen && !/\bhidden\b/.test(entry.className); }
                     U.getText(v, 15000, 256 * 1024).then(function (text) {   // (a list of URLs and keys: 256 KB is plenty)
                         var parsed = Stremio.parseSetupList(text);
+                        parsed.items = parsed.items.filter(function (it) { if (it.kind !== "playlist") { return true; } parsed.ignored++; return false; });
                         if (!parsed.items.length) { U.toast('No supported entries found in that file' + (parsed.ignored ? ' (' + parsed.ignored + ' ignored)' : ''), 4500); return; }
                         if (here()) { App.back(); renderSettings(); }
                         // what the file has, none ticked: you tick what to import

@@ -1,12 +1,12 @@
 {
   "name": "stremiok-tizen-2.3",
-  "version": "2.5.0",
+  "version": "2.5.6",
   "private": true,
   "description": "Open-source Stremio addon client for older Samsung TVs running Tizen 2.3",
   "license": "MIT",
   "repository": "github:socoliuc/StremioK-Tizen-2.3",
   "scripts": {
-    "test": "node scripts/check-tv23.cjs . && node scripts/test-account-history.cjs && node scripts/test-source-health.cjs && node scripts/test-image-hidden-screen.cjs && node scripts/test-episode-artwork.cjs",
+    "test": "node scripts/check-tv23.cjs . && node scripts/test-account-history.cjs && node scripts/test-source-health.cjs && node scripts/test-image-hidden-screen.cjs && node scripts/test-episode-artwork.cjs && node scripts/test-tv23-source-compatibility.cjs",
     "build:native": "node scripts/build-quickjs-nacl.cjs && node scripts/build-bearssl-nacl.cjs && node scripts/build-tv-engine.cjs && node scripts/nacl-trust-anchors.cjs && node scripts/build-tv-host.cjs",
     "build:widget": "npm run build:native && node scripts/package-unsigned.cjs"
   },

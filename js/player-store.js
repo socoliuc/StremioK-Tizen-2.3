@@ -84,7 +84,7 @@
     function pick3(list, id) { for (var i = 0; i < list.length; i++) { if (list[i][0] === id) { return list[i]; } } return list[0]; }
     function getSubCfg() {
         var d = U.store.get(SUBCFG_KEY, {}) || {};
-        return { lang: d.lang || 'en', lang2: d.lang2 || 'none', size: d.size || 'medium',   // (lang2: the second choice, 'none' = none)
+        return { lang: !d.lang || d.lang === 'en' ? 'eng' : d.lang, lang2: d.lang2 || 'none', size: d.size || 'medium',   // (lang2: the second choice, 'none' = none)
             color: pick3(SUB_COLORS, d.color)[0], bg: pick3(SUB_BGS, d.bg || 'light')[0],
             edge: pick3(SUB_EDGES, d.edge)[0], pos: pick3(SUB_POSITIONS, d.pos || 'bottom')[0],   // (Bottom unless chosen: Lower comes first in the list)
             font: subFontFamily(d.font) ? d.font : 'default',   // an unknown font -> TV default

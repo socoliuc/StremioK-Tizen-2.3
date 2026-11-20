@@ -35,3 +35,9 @@ Get-FileHash -Algorithm SHA256 .\dist\StremioK-Tizen-2.3-unsigned.wgt
 `build:native` compiles QuickJS and BearSSL, bundles the pinned TypeScript engine, generates public CA trust anchors from Node's bundled roots, and links `native/host_arm.nexe`. The bundle applies the port's scheduler, integrity-checking and buffer-ownership adaptations at build time. Build output can vary by toolchain and Node root certificate set.
 
 `build:widget` rebuilds the native module and packages only the files listed in `scripts/widget-files.txt` into `dist/StremioK-Tizen-2.3-unsigned.wgt`. Sign a freshly extracted copy with your own certificate as described in the [installation guide](INSTALL-TV23.md).
+
+## Verify a build
+
+`npm test` checks ES5 syntax and the Tizen 2.3 boot sequence, Stremio history import, torrent source ranking, background image work, episode artwork and source compatibility. It also checks the playback status poll and verifies that connection timeouts do not teach the app to mark a format as unsupported.
+
+Before sharing a widget, compare its contents with `scripts/widget-files.txt`, verify the version in `config.xml` and publish a SHA-256 checksum for the exact file. Keep device-signed packages, certificate profiles and local test data private. A hardware check should record the TV model, firmware, build version and the features tested. See the [playback guide](PLAYBACK-TV23.md) for the status messages to record.

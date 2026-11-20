@@ -159,7 +159,9 @@ var ViewParts = {};
         _modalOpen = false;
         if (_modalOnClose) { var f = _modalOnClose; _modalOnClose = null; try { f(); } catch (e) {} }
         if (_modalScope) { Focus.setScope(_modalScope, _modalPrevFocus); }
+        var detail = _modalScope && _modalScope.id === 'screen-detail';
         _modalScope = null; _modalPrevFocus = null;
+        if (detail && V.refreshDetailAfterModal) { setTimeout(V.refreshDetailAfterModal, 0); }
     }
 
     // A YouTube channel or playlist (StremioK's own, or YouTubio's): its source for your

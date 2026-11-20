@@ -7,8 +7,8 @@
     <script src="js/tv23-boot.js"></script>
     <script src="js/promise-polyfill.js"></script>
     <script src="$WEBAPIS/webapis/webapis.js"></script>
-    <link rel="stylesheet" href="css/style.css?v=2.5.0">
-    <link rel="stylesheet" href="css/tv23-cinema.css?v=2.5.0">
+    <link rel="stylesheet" href="css/style.css?v=2.5.6">
+    <link rel="stylesheet" href="css/tv23-cinema.css?v=2.5.6">
 </head>
 <body>
     <!-- CSS-applied sentinel (kept off-screen); app.js waits for its width before rendering -->
@@ -53,46 +53,41 @@
     <div id="stream-info" class="hidden"></div>
 
     <div id="toast" class="hidden"></div>
-    <div id="spinner" class="hidden"><div class="spin"></div><div id="spinner-msg"></div></div>
+    <div id="spinner" class="hidden"><div id="spinner-msg"></div></div>
 
-    <!-- Load order matters: polyfills -> util -> iptv -> data -> input -> tvapps -> player parts -> player -> ytplay -> view parts -> views -> app -->
+    <!-- Load order matters: polyfills -> util -> data -> input -> tvapps -> player parts -> player -> view parts -> views -> app -->
     <!-- ?v= busts the TV webview cache on every release (keep in sync with package.json) -->
-    <script src="js/polyfills.js?v=2.5.0"></script>
-    <script src="js/native-bridge.js?v=2.5.0"></script>
-    <script src="js/tv23-images.js?v=2.5.0"></script>
-    <script src="js/tv23-maintenance.js?v=2.5.0"></script>
-    <script src="js/util.js?v=2.5.0"></script>
-    <script src="js/iptv.js?v=2.5.0"></script>
-    <script src="js/epg.js?v=2.5.0"></script>
-    <script src="js/youtube.js?v=2.5.0"></script>
-    <script src="js/source-health.js?v=2.5.0"></script>
-    <script src="js/stremio.js?v=2.5.0"></script>
-    <script src="js/trakt.js?v=2.5.0"></script>
-    <script src="js/keys.js?v=2.5.0"></script>
-    <script src="js/focus.js?v=2.5.0"></script>
-    <script src="js/tvapps.js?v=2.5.0"></script>
-    <script src="js/player-core.js?v=2.5.0"></script>
-    <script src="js/player-store.js?v=2.5.0"></script>
-    <script src="js/player-lang.js?v=2.5.0"></script>
-    <script src="js/player-quality.js?v=2.5.0"></script>
-    <script src="js/player-subs.js?v=2.5.0"></script>
-    <script src="js/player-audio.js?v=2.5.0"></script>
-    <script src="js/player-controls.js?v=2.5.0"></script>
-    <script src="js/player.js?v=2.5.0"></script>
-    <script src="js/ytplay.js?v=2.5.0"></script>
-    <script src="js/local.js?v=2.5.0"></script>
-    <script src="js/downloads.js?v=2.5.0"></script>
-    <script src="js/pako-inflate.js?v=2.5.0"></script>
-    <script src="js/account-history.js?v=2.5.0"></script>
-    <script src="js/stremio-account.js?v=2.5.0"></script>
-    <script src="js/view-core.js?v=2.5.0"></script>
-    <script src="js/view-home.js?v=2.5.0"></script>
-    <script src="js/view-guide.js?v=2.5.0"></script>
-    <script src="js/view-detail.js?v=2.5.0"></script>
-    <script src="js/view-search.js?v=2.5.0"></script>
-    <script src="js/view-settings.js?v=2.5.0"></script>
-    <script src="js/view-discover.js?v=2.5.0"></script>
-    <script src="js/views.js?v=2.5.0"></script>
-    <script src="js/app.js?v=2.5.0"></script>
+    <script src="js/polyfills.js?v=2.5.6"></script>
+    <script src="js/native-bridge.js?v=2.5.6"></script>
+    <script src="js/tv23-images.js?v=2.5.6"></script>
+    <script src="js/tv23-maintenance.js?v=2.5.6"></script>
+    <script src="js/util.js?v=2.5.6"></script>
+    <script src="js/source-health.js?v=2.5.6"></script>
+    <script src="js/stremio.js?v=2.5.6"></script>
+    <script src="js/trakt.js?v=2.5.6"></script>
+    <script src="js/keys.js?v=2.5.6"></script>
+    <script src="js/focus.js?v=2.5.6"></script>
+    <script src="js/tvapps.js?v=2.5.6"></script>
+    <script src="js/player-core.js?v=2.5.6"></script>
+    <script src="js/player-store.js?v=2.5.6"></script>
+    <script src="js/player-lang.js?v=2.5.6"></script>
+    <script src="js/player-quality.js?v=2.5.6"></script>
+    <script src="js/player-subs.js?v=2.5.6"></script>
+    <script src="js/player-audio.js?v=2.5.6"></script>
+    <script src="js/player-controls.js?v=2.5.6"></script>
+    <script src="js/player.js?v=2.5.6"></script>
+    <script src="js/local.js?v=2.5.6"></script>
+    <script src="js/downloads.js?v=2.5.6"></script>
+    <script src="js/pako-inflate.js?v=2.5.6"></script>
+    <script src="js/account-history.js?v=2.5.6"></script>
+    <script src="js/stremio-account.js?v=2.5.6"></script>
+    <script src="js/view-core.js?v=2.5.6"></script>
+    <script src="js/view-home.js?v=2.5.6"></script>
+    <script src="js/view-detail.js?v=2.5.6"></script>
+    <script src="js/view-search.js?v=2.5.6"></script>
+    <script src="js/view-settings.js?v=2.5.6"></script>
+    <script src="js/view-discover.js?v=2.5.6"></script>
+    <script src="js/views.js?v=2.5.6"></script>
+    <script src="js/app.js?v=2.5.6"></script>
 </body>
 </html>

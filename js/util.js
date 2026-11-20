@@ -1047,7 +1047,7 @@ var U = (function () {
         _toastTimer = setTimeout(function () { t.className = 'hidden'; }, ms || 2600);
     }
 
-    // Show/hide the loading overlay. `msg` sets the status line under the spinner; when
+    // Show/hide the loading overlay. `msg` sets the status line; when
     // it's left out the current line stays, so a generic "busy" call (e.g. a buffering
     // event) doesn't wipe a more specific one ("Opening stream at 1080p…").
     function spinner(on, msg) {
@@ -1055,7 +1055,7 @@ var U = (function () {
         var m = byId('spinner-msg');
         if (m) {
             if (!on) { m.textContent = ''; }
-            else if (msg !== undefined) { m.textContent = msg; }
+            else if (msg !== undefined || !m.textContent) { m.textContent = msg || 'Loading…'; }
         }
     }
 

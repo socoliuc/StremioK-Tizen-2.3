@@ -15,7 +15,7 @@
     function scr() { return V.scr.apply(null, arguments); }   // core
 
     var DISCOVER_KEY = 'stremiok.discover';   // the last type / catalog / genre, for next time
-    var TYPE_ORDER = ['movie', 'series', 'tv', 'radio', 'sport', 'people'];
+    var TYPE_ORDER = ['movie', 'series', 'people'];
     var LOAD_AHEAD = 16;                       // load the next page when focus is this close to the end
     // Genres that came back empty. Addons can list genres their catalog has nothing in
     // (MediaFusion's Live TV offers every TV genre in its database, including ones only

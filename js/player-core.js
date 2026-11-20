@@ -461,19 +461,24 @@ var PlayerParts = {};
 
         if (!ctx.url && ctx.stream && /^[a-f0-9]{40}$/i.test(ctx.stream.infoHash || '') && typeof NativeBridge !== 'undefined') {
             var torrentCancel = _torrentCancel = U.cancelToken();
+            var stopTorrentProgress = watchTorrentStartup(torrentCancel);
             S.torrentPreparing = true;
             U.spinner(true, 'Connecting to torrent peers…');
             NativeBridge.prepareTorrent(ctx.stream, torrentCancel).then(function (result) {
                 if (torrentCancel.cancelled || !S.active || S.ctx !== ctx) { return; }
+                stopTorrentProgress();
                 _torrentCancel = null; S.torrentPreparing = false;
                 ctx.url = result.url; ctx._nativeTorrent = true;
+                U.spinner(true, 'Opening video…');
                 if (useAV) { startLive(ctx, settle); } else { startHTML5(ctx.url); }
             }).catch(function (error) {
                 if (torrentCancel.cancelled || !S.active || S.ctx !== ctx) { return; }
+                stopTorrentProgress();
                 _torrentCancel = null; S.torrentPreparing = false;
                 if (!ctx.private && Stremio.sourceHealth) { Stremio.sourceHealth.record(ctx.stream, 'failure'); }
-                if (nextSourceOnFail()) { return; }
-                U.toast('Torrent could not start. Try a source with more peers.', 6000);
+                var reason = 'Torrent setup did not finish';
+                if (nextSourceOnFail({ text: reason })) { return; }
+                U.toast(reason + '. Try another source.', 6000);
                 exit();
             });
         } else {
@@ -692,7 +697,7 @@ var PlayerParts = {};
                     if (!S.playing && (relayFailed() || tryFallback())) { return; }
                     reportStart(false, err);   // (unless it had already played)
                     U.log('player', 'Playback error: ' + err + ' (' + where(S.ctx && S.ctx.url) + ')');
-                    if (!S.playing) { failedStart('Playback error: ' + err); return; }
+                    if (!S.playing) { failedStart('Playback error: ' + err, err); return; }
                     U.toast('Playback error: ' + err);
                     exitLater();
                 }
@@ -732,7 +737,7 @@ var PlayerParts = {};
                 if (tryFallback()) { return; }
                 U.log('player', 'Could not open: ' + (err && (err.name || err.message || err)) + ' (' + where(url) + ')');
                 reportStart(false, err && (err.name || err.message || err));
-                failedStart('Could not open stream');
+                failedStart('Could not open stream', err && (err.name || err.message || err));
             });
         } catch (e) {
             U.log('player', 'AVPlay failed: ' + (e && e.message));
@@ -1040,6 +1045,27 @@ var PlayerParts = {};
         return true;
     }
 
+    // One outstanding status request per attempt. Cancel it with the torrent on exit or switch.
+    function watchTorrentStartup(cancel) {
+        var statusCancel = U.cancelToken(), timer = null;
+        var off = cancel.onCancel(function () { statusCancel.cancel(); clearTimeout(timer); });
+        function schedule() { if (!statusCancel.cancelled) { timer = setTimeout(poll, 5000); } }
+        function poll() {
+            if (statusCancel.cancelled) { return; }
+            NativeBridge.torrentStatus(statusCancel).then(function (status) {
+                if (statusCancel.cancelled) { return; }
+                if (status && status.active) {
+                    U.spinner(true, status.metadata ? 'Preparing torrent file…' : 'Waiting for torrent metadata… ' +
+                        status.peers + (status.peers === 1 ? ' peer connected' : ' peers connected'));
+                }
+                schedule();
+            }, schedule);
+        }
+        schedule();
+        cancel.onCancel(function () { clearTimeout(timer); });
+        return function () { statusCancel.cancel(); clearTimeout(timer); off(); };
+    }
+
     // ---------- a source that doesn't start ----------
     // Refused by the TV, or not started after AV_START_MS: with Settings › Source ranking › The
     // next source on (the default), the next best one this playback hasn't tried (the title's
@@ -1065,19 +1091,22 @@ var PlayerParts = {};
     // A start that failed: is the link a debrid addon's notice video (Torrentio's failed_access,
     // limits_exceeded…: noticeOf)? Then that's said, and for the account's ones the next source
     // skips the addon's links through that service; then the next source, or what's to say.
-    function failedStart(why) {
+    function failedStart(why, error) {
         var c = S.ctx, token = _playToken, st = c && c.stream;
+        var fallback = Stremio.isFormatError(error) ? { text: 'TV player rejected this format' }
+            : c && c._nativeTorrent ? { text: 'Video did not open after torrent setup' } : null;
         function finish(notice) {
             if (!S.active || S.ctx !== c || token !== _playToken) { return; }   // (something else playing meanwhile)
             if (notice) {
                 U.log('player', 'The source sent a notice: ' + notice.kind + (notice.service ? ' (' + notice.service + ')' : ''));
                 if (notice.account && notice.tag) { c._avoid = (c._avoid || []).concat([{ addon: st._addon, tag: notice.tag }]); }
             }
-            if (nextSourceOnFail(notice)) { return; }
-            U.toast(notice ? notice.text : why, notice ? 8000 : undefined);
+            var detail = notice || fallback;
+            if (nextSourceOnFail(detail)) { return; }
+            U.toast(detail ? detail.text : why, detail ? 8000 : undefined);
             exitLater();
         }
-        if (!c || !st || c.yt || c.localFile || S.isLive || !/^https?:\/\//i.test(st.url || '')) { finish(null); return; }
+        if (!c || !st || c._nativeTorrent || c.yt || c.localFile || S.isLive || !/^https?:\/\//i.test(st.url || '')) { finish(null); return; }
         noticeOf(st, finish);
     }
     // Where a source's link leads (its first bytes, asked for): a notice video, by its name, or null.
@@ -1120,7 +1149,7 @@ var PlayerParts = {};
         if (S.playStarted && isPaused()) { return; }
         if (_reco.tries) { liveDropped('Couldn’t reconnect'); return; }   // (a reconnect's try: the next one)
         if (S.ctx && !S.ctx.private && !S.ctx._healthTimedOut && Stremio.sourceHealth) { S.ctx._healthTimedOut = true; Stremio.sourceHealth.record(S.ctx.stream, 'failure'); }
-        if (nextSourceOnFail()) { return; }
+        if (nextSourceOnFail(S.ctx && S.ctx._nativeTorrent ? { text: 'Torrent connected, but playback timed out' } : null)) { return; }
         U.log('player', 'Didn’t start: nothing played in ' + (budget / 1000) + ' s (' + where(S.ctx && S.ctx.url) + ')');
         U.spinner(false);
         U.toast('Didn’t start: nothing played in ' + (budget / 1000) + ' seconds. Try another source.', 6000);

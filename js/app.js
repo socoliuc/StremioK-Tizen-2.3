@@ -182,7 +182,7 @@ var App = (function () {
             if (nowb - _lastBackAt < 500) { return true; }
             _lastBackAt = nowb;
         }
-        if (action === 'GUIDE') { guideKey(); return true; }
+        if (action === 'GUIDE') { return true; }
         if (Player.isActive()) { return Player.handleKey(action); }   // (a held OK too: the player's Cast & more has a menu behind it)
         if (Views.moveKey && Views.moveKey(action)) { return true; }   // (a Continue Watching card being moved)
         switch (action) {
@@ -213,16 +213,6 @@ var App = (function () {
                 if (/^NUM\d$/.test(action)) { numberKey(+action.slice(3)); }
                 return true;
         }
-    }
-
-    // The remote's GUIDE key: the Guide tab (once a TV guide is read: it's in the top menu), the
-    // player closed first. Not over a popup, nor while an addon's link is typed.
-    function guideKey() {
-        var on = (Views.menuItems ? Views.menuItems() : []).some(function (m) { return m.key === 'guide'; });
-        if (!on) { U.toast('No TV guide yet (Settings › Content › IPTV › Guide link)', 3000); return; }
-        if (Player.isActive()) { Player.exit(); }
-        else if (Views.isModalOpen() || _current === 'addaddon') { return; }
-        goHome('guide');
     }
 
     // Number keys away from the player: 0 Settings, 1–9 the top menu's items as they show (1:
