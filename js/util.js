@@ -471,6 +471,18 @@ var U = (function () {
     // headers (optional): { name: value } sent with it.
     // body (optional): sent as a POST (text), else it's a GET.
     function getText(url, timeoutMs, maxBytes, cancel, quiet, headers, body) {
+        // This public provider is verified on the TV's browser transport; avoid native TLS/redirect overhead.
+        if (/^https:\/\/v3-cinemeta\.strem\.io(?:\/|$)/i.test(url)) { return browserGetText(url, timeoutMs, maxBytes, cancel, quiet, headers, body); }
+        if (!(maxBytes > 8 * 1024 * 1024) && typeof NativeBridge !== 'undefined' && NativeBridge.available() && /^https?:\/\//i.test(url)) {
+            var priv = privateNow();
+            return NativeBridge.getText(url, timeoutMs, maxBytes, cancel, headers, body, _localOk()).catch(function (err) {
+                if (err.nativeUnavailable) { return browserGetText(url, timeoutMs, maxBytes, cancel, quiet, headers, body); }
+                throw quiet || err.cancelled ? err : noteNetwork(err, priv);
+            });
+        }
+        return browserGetText(url, timeoutMs, maxBytes, cancel, quiet, headers, body);
+    }
+    function browserGetText(url, timeoutMs, maxBytes, cancel, quiet, headers, body) {
         var priv = privateNow();   // (asked during a private playback: logged as one, however late it fails)
         function logged(err) { return quiet ? err : noteNetwork(err, priv); }
         maxBytes = maxBytes || TEXT_MAX;
@@ -1082,7 +1094,8 @@ var U = (function () {
         return 'url("' + ('' + src).replace(/["\\\n\r\f]/g, function (c) { return encodeURIComponent(c); }) + '")';
     }
     function showOn(item) {   // the image is in the browser now: put it on this node
-        if (item.bg) { item.img.style.backgroundImage = cssUrl(item.src); } else { item.img.src = item.src; }
+        var src = typeof TV23Images !== 'undefined' && TV23Images.peek(item.src) || item.src;
+        if (item.bg) { item.img.style.backgroundImage = cssUrl(src); } else { item.img.src = src; }
     }
     function failOn(item) {   // it can't load: this node's own fallback
         if (!item.bg && typeof item.img.onerror === 'function') { try { item.img.onerror(); } catch (e) {} }
@@ -1092,13 +1105,27 @@ var U = (function () {
     var IMAGE_TIMEOUT_MS = 12000;
     var _loading = [];   // { it, cancel } of the downloads in progress
     function onPage(node) { return document.documentElement.contains(node); }
+    // Screens are kept in the document when another view opens. Their children can report
+    // zero-sized rectangles; imageNearViewport must not climb past that hidden ancestor.
+    function inHiddenScreen(node) {
+        for (var p = node; p && p !== document.documentElement; p = p.parentNode) {
+            if (p.classList && p.classList.contains('screen') && p.classList.contains('hidden')) { return true; }
+        }
+        return false;
+    }
+    function visiblePage(node) { return onPage(node) && !inHiddenScreen(node); }
+    function queueCancelledItem(item) {
+        if (!item || !onPage(item.img) || item.img.__queuedImage !== item) { return; }
+        for (var i = 0; i < _imageQueue.length; i++) { if (_imageQueue[i] === item) { return; } }
+        _imageQueue.push(item);
+    }
     // Downloads nothing on screen is waiting for any more (the screen was redrawn or left)
     // are stopped, freeing their slot for the pictures that are.
     function dropUnwanted() {
         _loading.slice().forEach(function (l) {
-            if (onPage(l.it.img)) { return; }
+            if (visiblePage(l.it.img)) { return; }
             var waiting = _inflight[l.it.src] || [];
-            for (var i = 0; i < waiting.length; i++) { if (onPage(waiting[i].img)) { return; } }
+            for (var i = 0; i < waiting.length; i++) { if (visiblePage(waiting[i].img)) { return; } }
             l.cancel();
         });
     }
@@ -1106,10 +1133,17 @@ var U = (function () {
         dropUnwanted();
         if (isHidden()) { return; }   // (in the background: nothing new until StremioK is back)
         while (_imageActive < IMAGE_LOAD_LIMIT && _imageQueue.length) {
-            var item = _imageQueue.shift();
+            var next = -1;
+            for (var qi = 0; qi < _imageQueue.length; qi++) {
+                var queued = _imageQueue[qi];
+                if (!onPage(queued.img) || queued.img.__queuedImage !== queued) { _imageQueue.splice(qi--, 1); continue; }
+                if (!inHiddenScreen(queued.img) && imageNearViewport(queued.img)) { next = qi; break; }
+            }
+            if (next < 0) { return; }
+            var item = _imageQueue.splice(next, 1)[0];
             var img = item.img;
             // Re-rendered screens leave their old queued nodes detached; discard them.
-            if (!onPage(img) || img.__queuedImage !== item) {
+            if (!visiblePage(img) || img.__queuedImage !== item) {
                 continue;
             }
             img.__queuedImage = null;
@@ -1117,7 +1151,7 @@ var U = (function () {
             _imageActive++;
             _inflight[item.src] = [];
             (function (it) {
-                var finished = false, timer = null, entry = { it: it };
+                var finished = false, timer = null, entry = { it: it }, nativeCancel = null;
                 // A CSS background loads through a detached <img> (so it counts against the
                 // same limit), an <img> through itself.
                 var node = it.bg ? document.createElement('img') : it.img;
@@ -1133,6 +1167,7 @@ var U = (function () {
                     _imageActive--;
                 }
                 function abort() {   // the browser stops fetching it (where it supports that)
+                    if (nativeCancel) { nativeCancel.cancel(); nativeCancel = null; }
                     try { node.removeAttribute('src'); } catch (e) {}
                 }
                 function done(ok) {
@@ -1152,7 +1187,7 @@ var U = (function () {
                     if (finished) { return; }
                     stop();
                     abort();
-                    (_inflight[it.src] || []).concat([it]).forEach(function (w) { w.img.__queuedImage = w; });
+                    (_inflight[it.src] || []).concat([it]).forEach(function (w) { w.img.__queuedImage = w; queueCancelledItem(w); });
                     delete _inflight[it.src];
                     scheduleImagePump(0);
                 };
@@ -1167,10 +1202,29 @@ var U = (function () {
                 _loading.push(entry);
                 node.addEventListener('load', onLoad, false);
                 node.addEventListener('error', onError, false);
-                node.src = it.src;
+                if (typeof TV23Images !== 'undefined' && TV23Images.applies(it.src)) {
+                    nativeCancel = cancelToken();
+                    TV23Images.load(it.src, nativeCancel, _localOk()).then(function (src) { if (!finished) { node.src = src; } }, function () { if (!finished) { done(false); failOn(it); } });
+                } else { node.src = it.src; }
             })(item);
         }
     }
+
+    function imageNearViewport(node) {
+        if (inHiddenScreen(node)) { return false; }
+        if (!node.getBoundingClientRect) { return true; }
+        var r = node.getBoundingClientRect();
+        // A logo's intrinsic dimensions are unknown until its first decode.
+        // Use its visible container rather than starving the initial request.
+        var parent = node.parentNode, depth = 0;
+        while ((r.right <= r.left || r.bottom <= r.top) && parent && parent.getBoundingClientRect && depth++ < 6) {
+            r = parent.getBoundingClientRect(); parent = parent.parentNode;
+        }
+        return r.right > 0 && r.bottom > 0 && r.right > r.left && r.bottom > r.top && r.left < (window.innerWidth || 1920) + 200 && r.top < (window.innerHeight || 1080) + 200;
+    }
+
+    // Scroll does not bubble; capture nested episode lists and carousels too.
+    document.addEventListener('scroll', function () { scheduleImagePump(35); }, true);
 
     // Images that have loaded once this session. A card built again (a tab redrawn, Home
     // on the way back) shows those at once instead of queueing: the browser has them, so
@@ -1186,7 +1240,7 @@ var U = (function () {
     function queueImage(node, src, bg, first) {
         if (!node || !src) { return; }
         var item = { img: node, src: src, bg: !!bg };
-        if (_loadedSrc[src]) { node.__queuedImage = null; showOn(item); return; }
+        if (_loadedSrc[src] && !(typeof TV23Images !== 'undefined' && TV23Images.applies(src) && !TV23Images.peek(src))) { node.__queuedImage = null; showOn(item); return; }
         if (failedRecently(src)) { node.__queuedImage = null; failOn(item); return; }
         node.__queuedImage = item;
         if (first) { _imageQueue.unshift(item); } else { _imageQueue.push(item); }
@@ -1250,6 +1304,7 @@ var U = (function () {
     // Called after focus/scroll changes. Load the focused card first, then its
     // closest horizontal neighbors, while the rest continue in the background.
     function prioritizeImages(node) {
+        scheduleImagePump(0);
         if (!node || !node.querySelector || !node.classList.contains('card')) { return; }
         var nearby = [node];
         var prev = node.previousElementSibling;

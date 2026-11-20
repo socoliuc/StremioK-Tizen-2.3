@@ -1,0 +1,11 @@
+const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert');
+const util=fs.readFileSync(path.resolve(__dirname,'../js/util.js'),'utf8');
+const context={TMDB_W:{still:300,poster:342,landscape:780}};
+vm.createContext(context);
+vm.runInContext(util.slice(util.indexOf('    var TMDB_W ='),util.indexOf('\n    function promoteQueuedImage')),context);
+assert.equal(context.cardImage('https://episodes.metahub.space/tt0903747/1/1/w780.jpg','still'),'https://episodes.metahub.space/tt0903747/1/1/w300.jpg');
+assert.equal(context.cardImage('https://episodes.metahub.space/tt0903747/1/1/original.jpg','still'),'https://episodes.metahub.space/tt0903747/1/1/w300.jpg');
+assert.equal(context.cardImage('https://episodes.metahub.space/tt0903747/1/1/w300.jpg','still'),'https://episodes.metahub.space/tt0903747/1/1/w300.jpg');
+assert.equal(context.cardImage('https://episodes.metahub.space/tt0903747/1/1/w185.jpg','still'),'https://episodes.metahub.space/tt0903747/1/1/w185.jpg');
+assert.equal(context.cardImage('https://episodes.metahub.space/tt0903747/1/1/w780.jpg?x=1','still'),'https://episodes.metahub.space/tt0903747/1/1/w780.jpg?x=1');
+console.log('Cinemeta episode stills keep native-size URLs at w300 and preserve already-small or noncanonical artwork.');

@@ -25,22 +25,24 @@ html, body {
     z-index: 1;
 }
 #av-player.active, #html5-player.active { display: block; }
+/* Tizen 2.3 composites AVPlay beneath the web page; all covering planes must be clear. */
+html.tv23-video, html.tv23-video body, html.tv23-video #av-player { background: transparent !important; }
 
 #app { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; z-index: 10; }
 .screen { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; }
 .hidden { display: none !important; }
 
 /* --- Header --- */
-.header { height: 96px; padding: 30px 60px 0 60px; display: flex; align-items: center; }
+.header { height: 96px; padding: 30px 60px 0 60px; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
 .brand { font-size: 40px; font-weight: bold; color: #818cf8; letter-spacing: 1px; }
 .brand .dot { color: #e6e9ef; }
 /* private viewing on: StremioK as an outline (the fill hidden; the outline takes each letter's
    own color, so it follows the accent color and a light background) */
 .brand.private, .brand.private .dot { -webkit-text-fill-color: transparent; -webkit-text-stroke-width: 1.5px; }
-.header .spacer { flex: 1; }
+.header .spacer { -webkit-flex: 1; flex: 1; }
 .header-title { font-size: 36px; font-weight: bold; }
 /* Search and Settings: pills like the tabs (the top menu fits every tab, Local included, at 1920 px) */
-.header .hchip { display: inline-flex; align-items: center; font-size: 22px; padding: 8px 9px; margin-right: 5px; border-radius: 28px; background: #1a1f2b; color: #aeb6c4; border: 4px solid transparent; white-space: nowrap; }
+.header .hchip { display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center; font-size: 22px; padding: 8px 9px; margin-right: 5px; border-radius: 28px; background: #1a1f2b; color: #aeb6c4; border: 4px solid transparent; white-space: nowrap; }
 .header .hchip.focusable.focused { background: #818cf8; color: #0e1117; border-color: #fff; opacity: 1; }
 
 /* --- Rows --- */
@@ -64,7 +66,7 @@ html, body {
     border: 4px solid transparent;
 }
 .card .poster { width: 100%; height: 100%; display: block; background-size: cover; background-position: center; }
-.card .fallback { display: flex; align-items: center; justify-content: center; height: 100%; padding: 10px; font-size: 20px; color: #8b93a5; text-align: center; white-space: normal; }
+.card .fallback { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; height: 100%; padding: 10px; font-size: 20px; color: #8b93a5; text-align: center; white-space: normal; }
 .card .cap { position: absolute; bottom: 0; left: 0; right: 0; padding: 26px 10px 8px 10px; font-size: 18px; background: linear-gradient(transparent, rgba(0,0,0,0.85)); white-space: normal; line-height: 1.2; max-height: 70px; overflow: hidden; }
 .card .prog { position: absolute; bottom: 0; left: 0; height: 6px; background: #818cf8; }
 
@@ -77,10 +79,11 @@ html, body {
 .card.focusable.focused {
     border-color: #ffffff;
     box-shadow: 0 0 0 5px #6366f1;
-    transform: scale(1.09);
+    -webkit-transform: scale(1.09);
+            transform: scale(1.09);
     z-index: 5;
 }
-.card.focusable.moving { border-color: #ffffff; box-shadow: 0 0 0 5px #f59e0b; transform: scale(1.09); z-index: 6; }
+.card.focusable.moving { border-color: #ffffff; box-shadow: 0 0 0 5px #f59e0b; -webkit-transform: scale(1.09); transform: scale(1.09); z-index: 6; }
 
 /* Filled selection for list rows / buttons */
 .pill.focusable.focused, .stream.focusable.focused, .ep.focusable.focused { background: #818cf8; color: #0e1117; }
@@ -118,17 +121,17 @@ html, body {
 .ep .ep-sub, .stream .s-sub { display: block; font-size: 17px; color: #9aa2b1; margin-top: 4px; }
 
 /* episode rows with thumbnail + rating */
-.ep-row { display: flex; align-items: flex-start; padding: 12px 16px; height: 108px; overflow: hidden; }
-.ep-thumb { width: 120px; height: 68px; flex: 0 0 120px; margin-right: 18px; border-radius: 6px; background-color: #0e1117; background-size: cover; background-position: center; position: relative; overflow: hidden; }
+.ep-row { display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; padding: 12px 16px; height: 108px; overflow: hidden; }
+.ep-thumb { width: 120px; height: 68px; -webkit-flex: 0 0 120px; flex: 0 0 120px; margin-right: 18px; border-radius: 6px; background-color: #0e1117; background-size: cover; background-position: center; position: relative; overflow: hidden; }
 /* partly watched episode: progress along the bottom of its thumbnail */
 .ep-prog { position: absolute; left: 0; bottom: 0; height: 5px; background: #818cf8; }
-.ep-body { flex: 1; min-width: 0; }
-.ep-line { display: flex; align-items: flex-start; font-size: 22px; }
-.ep-title { flex: 1 1 auto; min-width: 0; }
-.ep-rating { flex: 0 0 auto; margin-left: 14px; color: #ffd257; font-size: 19px; white-space: nowrap; }
+.ep-body { -webkit-flex: 1; flex: 1; min-width: 0; }
+.ep-line { display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; font-size: 22px; }
+.ep-title { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; }
+.ep-rating { -webkit-flex: 0 0 auto; flex: 0 0 auto; margin-left: 14px; color: #ffd257; font-size: 19px; white-space: nowrap; }
 .ep-rating:empty { margin-left: 0; }
 .airs-pill { background: transparent; border-color: #818cf8; color: #818cf8; }   /* a series' next episode isn't out yet (not a button) */
-.ep-airs { flex: 0 0 auto; margin-left: 14px; padding: 1px 10px; border-radius: 6px; border: 2px solid #818cf8; color: #818cf8; font-size: 17px; white-space: nowrap; }
+.ep-airs { -webkit-flex: 0 0 auto; flex: 0 0 auto; margin-left: 14px; padding: 1px 10px; border-radius: 6px; border: 2px solid #818cf8; color: #818cf8; font-size: 17px; white-space: nowrap; }
 .ep.unaired { opacity: 0.7; }
 .ep.unaired.focused { opacity: 1; }
 .ep.focusable.focused .ep-airs { border-color: #17203a; color: #17203a; }
@@ -160,9 +163,9 @@ html, body {
 .settings-wrap { position: absolute; top: 120px; left: 60px; right: 60px; bottom: 40px; overflow: hidden; }
 .back-row { color: #c7cbd4; }
 /* Home Feeds ordering */
-.feed-row { display: flex; align-items: center; margin-bottom: 8px; }
+.feed-row { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-bottom: 8px; }
 .feed-btn { width: 60px; text-align: center; padding: 14px 0; margin-right: 8px; background: #161b26; border-radius: 8px; font-size: 22px; border: 4px solid transparent; }
-.feed-name { flex: 1; padding: 14px 18px; background: #161b26; border-radius: 8px; font-size: 22px; border: 4px solid transparent; white-space: normal; }
+.feed-name { -webkit-flex: 1; flex: 1; padding: 14px 18px; background: #161b26; border-radius: 8px; font-size: 22px; border: 4px solid transparent; white-space: normal; }
 .feed-off .feed-name { opacity: 0.5; }
 .feed-btn.focusable.focused, .feed-name.focusable.focused { background: #818cf8; color: #0e1117; border-color: #fff; }
 .settings-wrap h2 { font-size: 30px; margin-bottom: 20px; }
@@ -202,8 +205,8 @@ html, body {
 #osd-scrub-time { position: absolute; bottom: 34px; left: 50%; -webkit-transform: translateX(-50%); transform: translateX(-50%); white-space: nowrap; font-size: 26px; font-weight: bold; color: #fff; background: rgba(20,25,36,0.96); border: 2px solid #6366f1; padding: 6px 14px; border-radius: 8px; }
 #osd-scrub.edge-l #osd-scrub-time { left: 0; -webkit-transform: none; transform: none; }
 #osd-scrub.edge-r #osd-scrub-time { left: auto; right: 0; -webkit-transform: none; transform: none; }
-#osd-times { display: flex; justify-content: space-between; margin-top: 10px; font-size: 20px; color: #cfd3dc; }
-#osd-times .osd-right { display: flex; align-items: center; }
+#osd-times { display: -webkit-flex; display: flex; -webkit-justify-content: space-between; justify-content: space-between; margin-top: 10px; font-size: 20px; color: #cfd3dc; }
+#osd-times .osd-right { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
 #osd-tags { font-size: 17px; color: #9aa2b1; margin-right: 18px; letter-spacing: 0.3px; }   /* (what's playing, in short) */
 #osd-tags:empty { display: none; }
 #osd-cur.live { color: #ff4d4d; font-weight: bold; letter-spacing: 1px; }
@@ -227,8 +230,8 @@ html, body {
 
 /* --- Search --- */
 .search-wrap { position: absolute; top: 120px; left: 60px; right: 60px; bottom: 40px; }
-.search-bar { display: flex; margin-bottom: 26px; }
-#search-input { flex: 1; padding: 16px 20px; font-size: 26px; background: #0e1117; color: #fff; border: 4px solid #2a3346; border-radius: 8px; }
+.search-bar { display: -webkit-flex; display: flex; margin-bottom: 26px; }
+#search-input { -webkit-flex: 1; flex: 1; padding: 16px 20px; font-size: 26px; background: #0e1117; color: #fff; border: 4px solid #2a3346; border-radius: 8px; }
 #search-input.focused { border-color: #818cf8; }
 .search-go { margin-left: 16px; }
 /* Results keep exactly 7 portrait columns (7 x 222px - 22 = 1532px + padding, with room
@@ -244,8 +247,8 @@ html, body {
 .search-results .row .card { margin: 0 22px 0 0; }
 .search-empty { font-size: 24px; color: #8b93a5; margin-top: 30px; }
 /* while a search's sources answer (and, after, the ones that didn't) */
-.search-status { display: flex; align-items: center; margin: 0 0 10px 24px; font-size: 22px; color: #8b93a5; min-height: 34px; }
-.search-status .spin-small { width: 22px; height: 22px; border-width: 4px; margin-right: 14px; flex: 0 0 auto; }
+.search-status { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin: 0 0 10px 24px; font-size: 22px; color: #8b93a5; min-height: 34px; }
+.search-status .spin-small { width: 22px; height: 22px; border-width: 4px; margin-right: 14px; -webkit-flex: 0 0 auto; flex: 0 0 auto; }
 .search-status-warn { color: #f0a5a5; }
 .search-recent { position: absolute; top: 96px; right: 0; width: 216px; bottom: 0; overflow: hidden; padding: 22px 4px 0 4px; }
 .recent-title { font-size: 18px; color: #8b93a5; margin-bottom: 12px; }
@@ -254,9 +257,9 @@ html, body {
 
 /* --- Stream info overlay (player menu) --- */
 #stream-info { position: absolute; top: 50px; right: 60px; z-index: 26; min-width: 460px; max-width: 760px; background: rgba(14,17,23,0.9); border: 2px solid #2a3346; border-radius: 12px; padding: 16px 22px; font-size: 20px; }
-#stream-info .si-row { display: flex; padding: 3px 0; }
-#stream-info .si-k { flex: 0 0 130px; color: #8b93a5; }
-#stream-info .si-v { flex: 1; color: #e6e9ef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#stream-info .si-row { display: -webkit-flex; display: flex; padding: 3px 0; }
+#stream-info .si-k { -webkit-flex: 0 0 130px; flex: 0 0 130px; color: #8b93a5; }
+#stream-info .si-v { -webkit-flex: 1; flex: 1; color: #e6e9ef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* --- Home: focused title's details between the top menu and the rows --- */
 .home-info + .rows { top: 274px; }   /* rows start just below the details strip, so it reads as theirs */
@@ -281,9 +284,9 @@ html, body {
 #player-bar .pb-btn.sel { background: #818cf8; color: #0e1117; border-color: #fff; }
 /* Cast & crew over the video (quick bar): a strip of photos, moved to keep the selected one in view */
 #cast-strip { position: absolute; left: 0; right: 0; bottom: 230px; z-index: 23; padding: 18px 60px 22px 60px; background: rgba(0,0,0,0.55); overflow: hidden; }   /* see-through, like the subtitles' default box; dark whatever the Appearance background */
-#cast-strip .cs-head { display: flex; align-items: baseline; margin-bottom: 14px; }
-#cast-strip .cs-title { flex: 1; font-size: 24px; font-weight: bold; color: #e6e9ef; text-shadow: 0 1px 3px rgba(0,0,0,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#cast-strip .cs-hint { flex: 0 0 auto; margin-left: 24px; font-size: 18px; color: #b4bac6; text-shadow: 0 1px 3px rgba(0,0,0,0.9); white-space: pre; }
+#cast-strip .cs-head { display: -webkit-flex; display: flex; -webkit-align-items: baseline; align-items: baseline; margin-bottom: 14px; }
+#cast-strip .cs-title { -webkit-flex: 1; flex: 1; font-size: 24px; font-weight: bold; color: #e6e9ef; text-shadow: 0 1px 3px rgba(0,0,0,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#cast-strip .cs-hint { -webkit-flex: 0 0 auto; flex: 0 0 auto; margin-left: 24px; font-size: 18px; color: #b4bac6; text-shadow: 0 1px 3px rgba(0,0,0,0.9); white-space: pre; }
 #cast-strip .cs-strip { white-space: nowrap; height: 330px; }
 #cast-strip .cs-card { display: inline-block; vertical-align: top; width: 172px; margin-right: 24px; white-space: normal; }
 #cast-strip .cs-photo { display: block; box-sizing: border-box; width: 172px; height: 240px; object-fit: cover; border-radius: 10px; background: #1a1f2b; border: 4px solid transparent; }
@@ -295,8 +298,8 @@ html, body {
 #cast-strip .cs-note { font-size: 20px; color: #8b93a5; }
 /* A YouTube video's end screen (its linked videos) and cards, over the video */
 #yt-links { position: absolute; left: 0; right: 0; bottom: 230px; z-index: 23; padding: 18px 60px 22px 60px; background: rgba(0,0,0,0.55); }
-#yt-links .yl-head { display: flex; align-items: baseline; margin-bottom: 14px; }
-#yt-links .yl-heading { flex: 1; font-size: 24px; font-weight: bold; color: #e6e9ef; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+#yt-links .yl-head { display: -webkit-flex; display: flex; -webkit-align-items: baseline; align-items: baseline; margin-bottom: 14px; }
+#yt-links .yl-heading { -webkit-flex: 1; flex: 1; font-size: 24px; font-weight: bold; color: #e6e9ef; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
 #yt-links .yl-hint { font-size: 18px; color: #b4bac6; white-space: pre; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
 #yt-links .yl-row { white-space: nowrap; overflow: hidden; }
 #yt-links .yl-card { display: inline-block; vertical-align: top; width: 320px; margin-right: 24px; white-space: normal; }
@@ -319,10 +322,10 @@ html, body {
 .card.landscape { width: 340px; height: 200px; }
 
 /* --- Confirm modal --- */
-.modal-overlay { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; z-index: 45; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; }
+.modal-overlay { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; z-index: 45; background: rgba(0,0,0,0.72); display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; }
 .modal-box { width: 820px; background: #161b26; border: 2px solid #2a3346; border-radius: 16px; padding: 44px 48px; text-align: center; }
 .modal-msg { font-size: 30px; line-height: 1.4; color: #e6e9ef; margin-bottom: 36px; }
-.modal-row { display: flex; justify-content: center; }
+.modal-row { display: -webkit-flex; display: flex; -webkit-justify-content: center; justify-content: center; }
 .modal-btn { min-width: 200px; text-align: center; }
 /* Watching's, an addon's and a playlist's menus: as wide as their buttons (each sized to its words, on one
    line), within the screen; the name above wraps rather than widening it */
@@ -330,9 +333,9 @@ html, body {
 .actions-box .modal-btn { min-width: 0; white-space: nowrap; padding: 14px 24px; margin-right: 12px; }
 .actions-box .modal-btn:last-child { margin-right: 0; }
 /* Settings › IPTV: ▲ ▼ and the playlist (name, link, channels / downloaded, problem) */
-.playlist-row { align-items: stretch; margin-bottom: 10px; }
-.playlist-row .feed-btn { display: flex; align-items: center; justify-content: center; }
-.playlist-row .playlist-item { flex: 1; margin-bottom: 0; }
+.playlist-row { -webkit-align-items: stretch; align-items: stretch; margin-bottom: 10px; }
+.playlist-row .feed-btn { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; }
+.playlist-row .playlist-item { -webkit-flex: 1; flex: 1; margin-bottom: 0; }
 .feed-off .playlist-item { opacity: 0.5; }
 .playlist-item .addon-said:empty { display: none; }
 /* an addon's logo (Settings › Content › Addons): its initial until the logo has loaded, then the logo over it */
@@ -365,16 +368,16 @@ html, body {
 /* --- Toast + spinner --- */
 #hold-hint { position: absolute; right: 36px; bottom: 20px; z-index: 20; font-size: 17px; color: #c7cbd4; background: rgba(0,0,0,0.6); padding: 6px 14px; border-radius: 16px; pointer-events: none; }
 #toast { position: absolute; bottom: 60px; left: 50%; margin-left: -300px; width: 600px; text-align: center; z-index: 40; background: rgba(0,0,0,0.85); padding: 18px 24px; border-radius: 10px; font-size: 22px; }
-#spinner { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); }
+#spinner { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; z-index: 50; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; background: rgba(0,0,0,0.3); }
 /* status line under the spinner ("Opening stream at 1080p…"); empty when unused */
 #spinner-msg { margin-top: 26px; font-size: 28px; color: #fff; text-shadow: 0 2px 6px #000; text-align: center; }
 .spin { width: 70px; height: 70px; border: 7px solid rgba(255,255,255,0.2); border-top-color: #818cf8; border-radius: 50%; -webkit-animation: sp 0.9s linear infinite; animation: sp 0.9s linear infinite; }
 @-webkit-keyframes sp { to { -webkit-transform: rotate(360deg); } }
-@keyframes sp { to { transform: rotate(360deg); } }
+@keyframes sp { to { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
 
 /* Home top row: tab pills + Search + Settings on the left, StremioK logo on the right */
-.home-header .tabbar-inline { display: flex; align-items: center; }
-.tab-pill { display: inline-flex; align-items: center; font-size: 22px; padding: 8px 9px; margin-right: 5px; border-radius: 28px; background: #1a1f2b; color: #aeb6c4; border: 4px solid transparent; white-space: nowrap; }
+.home-header .tabbar-inline { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.tab-pill { display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center; font-size: 22px; padding: 8px 9px; margin-right: 5px; border-radius: 28px; background: #1a1f2b; color: #aeb6c4; border: 4px solid transparent; white-space: nowrap; }
 .tab-ic { margin-left: 6px; font-size: 22px; }
 .tab-pill.active { background: #2a3346; color: #fff; }
 .tab-pill.focusable.focused { background: #818cf8; color: #0e1117; border-color: #fff; }
@@ -479,15 +482,15 @@ html, body {
 #screen-discover .home-info { top: 196px; height: 124px; }
 #screen-discover .home-info-desc { max-height: 26px; }
 .discover-grid { position: absolute; top: 330px; left: 0; right: 0; bottom: 0; overflow: hidden;
-    padding: 26px 40px 60px 60px; display: flex; flex-wrap: wrap; align-content: flex-start; overflow-anchor: none; }   /* the app keeps its place when rows go (newer browsers would too: twice) */
-.discover-grid .card { flex: 0 0 auto; margin: 0 22px 34px 0; }
+    padding: 26px 40px 60px 60px; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-content: flex-start; align-content: flex-start; overflow-anchor: none; }   /* the app keeps its place when rows go (newer browsers would too: twice) */
+.discover-grid .card { -webkit-flex: 0 0 auto; flex: 0 0 auto; margin: 0 22px 34px 0; }
 .discover-grid .row-empty { margin: 30px 0; }
-.discover-grid .discover-empty { flex: 0 0 100%; }   /* an empty answer: its message, then ↻ Try again under it */
+.discover-grid .discover-empty { -webkit-flex: 0 0 100%; flex: 0 0 100%; }   /* an empty answer: its message, then ↻ Try again under it */
 .discover-grid .discover-empty .row-empty { margin: 30px 0 22px 0; }
 .discover-grid .discover-retry { display: inline-block; }
 /* Continue Watching: the cards wrap into a grid (like Discover's), which the rows area scrolls */
-.card-grid { display: flex; flex-wrap: wrap; align-content: flex-start; padding: 26px 40px 30px 60px; }
-.card-grid .card { flex: 0 0 auto; margin: 0 22px 34px 0; }
+.card-grid { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-content: flex-start; align-content: flex-start; padding: 26px 40px 30px 60px; }
+.card-grid .card { -webkit-flex: 0 0 auto; flex: 0 0 auto; margin: 0 22px 34px 0; }
 /* Local tab (a USB drive): folders as plain tiles, a video with no poster by its name */
 .card.local-folder { background: #1c2333; }
 .card.local-folder .fallback { font-size: 24px; color: #c9cfdb; }
@@ -521,13 +524,13 @@ html, body {
 /* the Guide tab (js/view-guide.js): the hours along the top, then a row a channel; programs
    placed by their time (left / width in %), what's on now lighter, a line at the time now */
 .guide { padding: 0 60px 20px 60px; }   /* (the same sides as Home's rows: .row-title, .row-scroller) */
-.guide-head { display: flex; height: 34px; }
-.guide-corner { width: 230px; flex: none; font-size: 17px; color: #8b93a5; line-height: 34px; }
-.guide-hours { position: relative; flex: 1; }
+.guide-head { display: -webkit-flex; display: flex; height: 34px; }
+.guide-corner { width: 230px; -webkit-flex: none; flex: none; font-size: 17px; color: #8b93a5; line-height: 34px; }
+.guide-hours { position: relative; -webkit-flex: 1; flex: 1; }
 .guide-time { position: absolute; top: 0; font-size: 17px; color: #aeb6c4; line-height: 34px; padding-left: 6px; border-left: 2px solid #2a3346; }
-.guide-row { display: flex; height: 62px; margin-bottom: 6px; }
-.guide-ch { width: 230px; flex: none; padding: 0 12px; font-size: 19px; font-weight: bold; line-height: 62px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #121722; border-radius: 8px 0 0 8px; }
-.guide-track { position: relative; flex: 1; overflow: hidden; background: #0e1219; }
+.guide-row { display: -webkit-flex; display: flex; height: 62px; margin-bottom: 6px; }
+.guide-ch { width: 230px; -webkit-flex: none; flex: none; padding: 0 12px; font-size: 19px; font-weight: bold; line-height: 62px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #121722; border-radius: 8px 0 0 8px; }
+.guide-track { position: relative; -webkit-flex: 1; flex: 1; overflow: hidden; background: #0e1219; }
 .guide-prog { position: absolute; top: 0; bottom: 0; padding: 0 10px; font-size: 18px; line-height: 56px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #161b26; border: 3px solid #0e1117; border-radius: 6px; color: #c7cbd4; }
 .guide-prog.now { background: #222b3d; color: #fff; }
 .guide-prog.guide-wait { color: #8b93a5; font-style: italic; }   /* (a row whose programs are still being read) */

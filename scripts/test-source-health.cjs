@@ -1,0 +1,47 @@
+'use strict';
+var assert = require('assert');
+var health = require('../js/source-health.js');
+var data = {}, clock = 1000000;
+var store = { getItem: function (k) { return data[k] || null; }, setItem: function (k, v) { data[k] = v; } };
+var h = health.create(store, { now: function () { return clock; }, maxEntries: 3, ttlMs: 1000 });
+function stream(hash, idx, extra) { var s = { infoHash: hash || 'a'.repeat(40), fileIdx: idx || 0 }; Object.keys(extra || {}).forEach(function (k) { s[k] = extra[k]; }); return s; }
+assert.strictEqual(h.seeders({ seeders: 12 }), 12);
+assert.strictEqual(h.seeders({ behaviorHints: { seeders: '23' } }), 23);
+assert.strictEqual(h.seeders({ description: '⚡ 1080p | 👤 123 | 4.2 GB' }), 123);
+assert.strictEqual(h.seeders({ description: 'Seeders: 0 | Peers: 99' }), 0);
+assert.strictEqual(h.seeders({ description: 'Peers: 99 | 4 GB' }), null);
+assert.strictEqual(h.seeders({ description: '👤 99 GB | Peers: 12' }), 99); // labeled 👤 convention
+assert.strictEqual(h.seeders({ seeds: 0 }), 0);
+assert.strictEqual(h.seeders({ description: 'Seeders: 1,234 | 8 GB' }), 1234);
+assert.strictEqual(h.seeders({ description: '👤 1.2K | 8 GB' }), 1200);
+assert.strictEqual(h.seeders({ description: '8 GB | 1080p | Peers: 1.2K' }), null);
+var zero = stream('a'.repeat(40), 0, { seeders: 0 }), unknown = stream('b'.repeat(40), 0, {}), healthy = stream('c'.repeat(40), 0, { seeders: 2 });
+assert(h.compare(healthy, zero) < 0); assert(h.compare(unknown, zero) < 0);
+assert.strictEqual(h.get(zero), null);
+assert(h.record(zero, 'success')); assert.strictEqual(h.get(zero), 'ok');
+assert(h.record(zero, 'failure')); assert.strictEqual(h.get(zero), 'bad');
+assert.strictEqual(h.record(zero, 'cancelled'), false); assert.strictEqual(h.get(zero), 'bad');
+assert.strictEqual(h.compare(zero, stream('f'.repeat(40), 0, { seeders: 0 })), 1);
+var failedHigh = stream('1'.repeat(40), 0, { seeders: 999 }), plainLow = stream('2'.repeat(40), 0, { seeders: 1 });
+h.record(failedHigh, 'failure'); assert(h.compare(plainLow, failedHigh) < 0);
+assert.strictEqual(h.label(failedHigh), 'Recent failure');
+h.record(healthy, 'success'); assert.strictEqual(h.label(healthy), 'Recently worked');
+assert(h.compare(healthy, stream('3'.repeat(40), 0, { seeders: 2 })) < 0);
+h.record(stream('d'.repeat(40), 0), 'success'); h.record(stream('e'.repeat(40), 0), 'success');
+assert.strictEqual(JSON.parse(data[health.storageKey]).length, 3);
+clock += 1001; assert.strictEqual(h.get(zero), null); assert(!JSON.stringify(JSON.parse(data[health.storageKey])).match(/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/));
+assert.strictEqual(h.key({ url: 'https://addon.example/path?token=secret' }), '');
+assert.strictEqual(h.key(stream('5'.repeat(40), 'private-file-index')), '');
+assert.strictEqual(h.key(stream('5'.repeat(40), 1000001)), '');
+var longData = {}, longStore = { getItem: function (k) { return longData[k] || null; }, setItem: function (k, v) { longData[k] = v; } };
+var long = health.create(longStore, { now: function () { return clock; } }), successOnly = stream('4'.repeat(40), 0, {});
+long.record(successOnly, 'success'); clock += 7 * 24 * 60 * 60 * 1000 + 1;
+assert.strictEqual(long.get(successOnly), null); assert.strictEqual(long.label(successOnly), '');
+var reads = 0, perfData = {}, perfStore = { getItem: function (k) { reads++; return perfData[k] || null; }, setItem: function (k, v) { perfData[k] = v; } };
+var perf = health.create(perfStore), p = stream('6'.repeat(40), 5, { seeders: 8 }), q = stream('7'.repeat(40), 5, {});
+for (var compareCount = 0; compareCount < 100; compareCount++) { perf.compare(p, q); }
+assert(reads <= 1);
+perfData[health.storageKey] = JSON.stringify([{ k: 'https://host/?token=private|secret', s: 'bad', t: Date.now() }, { k: '8'.repeat(40) + '|0', s: 'ok', t: Date.now() }]);
+var malformed = health.create(perfStore); assert.strictEqual(malformed.get(stream('8'.repeat(40), 0)), 'ok');
+assert(!/private|secret/.test(perfData[health.storageKey]));
+console.log('source-health tests passed');

@@ -1,116 +1,29 @@
-# StremioK for Samsung Tizen TVs (Tizen 3.0+)
+# StremioK for Older Samsung TVs (Tizen 2.3)
 
-StremioK is a from-scratch Stremio-addon streaming client for Samsung Tizen TVs.
-It was originally built for a 2017 UN50MU6100 running Tizen 3.0
-(~Chromium 47) and is also tested on a 2021 QN55Q80AAG running Tizen 6.0.
+An open-source Stremio addon client for older Samsung Smart TVs. This community fork of [StremioK by Kepler75](https://github.com/Kepler75/StremioK) brings the app to **Tizen 2.3** and runs the BitTorrent engine on the TV.
 
-Old Samsung Tizen TVs run web applications rather than Android APKs. StremioK is
-therefore written in old-Chromium-compatible HTML, JavaScript (ES5) and CSS, and plays
-video through Samsung's AVPlay API.
+| Compatibility | Status |
+| --- | --- |
+| Samsung UE40JU6000 (2015), Tizen 2.3, ARM, firmware T-HKM6DEUC-1570.0 | Tested on hardware |
+| Other 2015 Samsung Tizen 2.3 TVs | Compatibility varies by model and firmware. Test on your device. |
+| Samsung Tizen 3.0 and later | See the [upstream StremioK project](https://github.com/Kepler75/StremioK) for its supported models. |
 
-- **[Installation guide](docs/INSTALL.md)**: the three ways to put it on your TV.
-- **[User guide](docs/USER-GUIDE.md)**: how to use it, task by task.
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)**: when something doesn't work.
-- **[Privacy and data](docs/PRIVACY.md)**: what's kept on the TV, and what's sent where.
-- **[Settings reference](docs/SETTINGS.md)**: every setting, its choices and default.
-- **[Changelog](CHANGELOG.md)**: what changed in each version.
-- **[Developer guide](docs/DEVELOPER-GUIDE.md)**: how it's put together, and running it in a
-  browser.
-- **[Security policy](docs/SECURITY.md)**: reporting a vulnerability, privately.
+## What this port adds
 
-## Highlights
+- **Native torrent playback** through an ARM Pepper 37 module with JSTorrent. It streams verified pieces to Samsung AVPlay through a local connection on the TV. After installation, playback runs without a PC, NAS, or phone.
+- **Stremio library and Continue Watching** through QR sign-in. The TV imports library entries, resume positions and watched episode markers. Stremio sync reads account data. If you connect Trakt, the app can send eligible viewing progress to Trakt.
+- **Remote-friendly Home** with larger posters, focused previews, and prioritized episode images.
+- **English subtitles by default** when an English track is available. Subtitle preferences remain configurable.
+- **Torrent availability ranking** using addon-reported seed counts and recent playback results on the TV.
 
-- **Your addons:** catalogs, details, sources and subtitles from the Stremio addons you add
-  (Cinemeta and OpenSubtitles to start with), in the order you choose.
-- **Home** with Watching (Continue Watching, synced with **Trakt** if you connect it), Movies,
-  Series, IPTV, Guide, Radio, Sports, YouTube and Local tabs; **Discover** to browse any catalog in full;
-  **Search** across every addon that can search, and people by name.
-- **Title pages:** ranked sources with **▶ Play best**, trailers, ratings (IMDb, Rotten
-  Tomatoes, Metacritic… with your own API keys), seasons and episodes with their own pages,
-  *Cast & more*, *More like this* and collections.
-- **The player:** resume where you stopped, skip intros, recaps and credits, next episode,
-  subtitles (addons', the file's own, and your own files on a USB drive) with your choice of look, audio
-  tracks remembered, switching source mid-playback, private viewing.
-- **IPTV and radio** from your M3U playlists and Xtream accounts, with CH+ / CH−.
-- **YouTube:** live channels, trailers, and your own YouTube channels, playlists and searches,
-  with SponsorBlock, DeArrow, chapters and captions.
-- **Local:** the videos on a USB drive, matched to their titles.
-- **Made for the remote:** D-pad navigation throughout; hold OK where an item has more to
-  offer (*Hold OK for more* says so).
+## Install on a TV
 
-## Install
+Download the unsigned widget from [2.5.0 Preview](https://github.com/socoliuc/StremioK-Tizen-2.3/releases/tag/v2.5.0-tv23-preview). Use the [installation and signing guide](docs/INSTALL-TV23.md) to sign it with your own Samsung TV certificate profile and install it in Developer Mode. [Build from source](docs/BUILD-TV23.md) documents the Windows ARM toolchain and dependencies.
 
-Three ways, all covered step by step in the **[installation guide](docs/INSTALL.md)**:
+The port uses Samsung's public Developer Mode and Pepper APIs. It works with your existing TV firmware. Playback depends on addon availability, torrent peers and formats supported by your TV. The app hosts no media.
 
-- **TizenBrew** (Tizen 3.0 to 6.0): add the NPM module `stremiok`. No certificate needed;
-  StremioK's storage is shared with other TizenBrew modules.
-- **Apps2Samsung:** installs a [release](https://github.com/Kepler75/StremioK/releases)'s
-  `.wgt`, signing it with your own Samsung certificate. No Tizen Studio needed.
-- **Tizen Studio:** build the `.wgt` from this repository and sideload it.
+## Source and license
 
-## First steps
+The application is licensed under the [MIT License](LICENSE). The native module's dependency notices are in [native/LICENSES.txt](native/LICENSES.txt). The repository retains upstream history and attribution. The [privacy notes](docs/PRIVACY.md) explain what the app stores on the TV and how it uses network services.
 
-1. **Addons:** add the addons you use, by link, or bring them in from your Stremio account,
-   AIOManager or a configuration file. A stream addon that gives HTTP(S) links (for example
-   through a debrid service) is what makes titles playable.
-2. **API keys**, optional: your own TMDB, OMDb and MDBList keys add ratings, *Cast & more*,
-   *where to watch* and episode trailers.
-3. **Trakt**, optional: connect your account to share watched marks and Continue Watching.
-4. **IPTV**, optional: your M3U playlist links, or an Xtream account (its server, username and
-   password).
-5. **A USB drive**, optional: plug it in and the Local tab appears.
-
-[Getting started](docs/USER-GUIDE.md#getting-started) in the user guide walks through each.
-
-## Content / legal note
-
-This app hosts **no** media. It is a client for the open Stremio addon protocol: catalogs and
-metadata come from the addons you install (**Cinemeta**, the official one, by default), and
-playable sources come from whatever **stream addons you add yourself** in Settings. Streams
-that only expose a torrent `infoHash` (no HTTP URL) are listed but not playable: AVPlay needs
-a direct HTTP(S)/HLS/DASH URL, and this app embeds no torrent or debrid engine.
-> **Note on WatchHub:** StremioK doesn't install it. Its answers say it's only for clients
-> Stremio authorizes in writing, and StremioK isn't one; "where to watch" comes from TMDB
-> instead (with a TMDB key). You can still add it yourself as a third-party addon (Settings
-> shows that notice on it); its results are rent/buy/subscription *links to external
-> services*, not video URLs. Add stream addons that return HTTP/HLS URLs for actual playback.
-
-The **IPTV** feature likewise hosts no content: you supply your own M3U playlist URLs or Xtream
-accounts. For YouTube entries, the bundled service finds the video's stream; the video itself
-comes straight from YouTube. No video or audio is kept: everything plays straight from its
-source, unless you download it to your own USB drive. What StremioK does keep, on the TV, is
-your progress, settings and copies that let it start faster (see
-[Privacy and data](docs/PRIVACY.md#what-stays-on-the-tv)).
-
-## Known limitations
-
-- AVPlay behavior varies by TV generation, codec and HLS provider.
-- No torrent playback: sources need a direct HTTP(S)/HLS/DASH URL (e.g. through a debrid
-  addon).
-- Home rows show a catalog's first page (up to 30 titles); Discover pages through the rest.
-- No StremioK account and no profiles: settings, addons and progress stay on the TV. The
-  only sync is optional: Trakt (watched marks, Continue Watching, ratings).
-- Subtitles use an HTML overlay; gzipped (`.gz`) subtitle files aren't decoded.
-- No playback speed control (the TV's player mutes audio at other speeds), and no
-  HDR / frame-rate mode switching (not available to web apps on Tizen 3).
-- Search and text fields use the TV's own on-screen keyboard, or **your phone**: a QR code
-  opens a one-time page StremioK serves on your home network. It's plain HTTP (unencrypted),
-  so use it only on a network you trust, since addon and playlist links often carry tokens.
-- "Where to watch" sources open the app on its home screen, or on the title only where an
-  addon you added gives the app's own link and the app takes it. Opening apps under TizenBrew
-  depends on what TizenBrew allows its modules; the `.wgt` has the permission.
-- YouTube channels and trailers depend on the bundled service and on YouTube's
-  undocumented behavior, so YouTube changes may need resolver updates.
-
-## License
-
-MIT: see [LICENSE](LICENSE).
-
-Skip timestamps come partly from [SkipDB](https://skipdb.tv), whose data is published under
-the [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/) (see its
-[DATA-LICENSE](https://github.com/SkipDB-TV/skipdb/blob/main/DATA-LICENSE)). StremioK only
-reads it through SkipDB's public API and keeps none of it.
-
-`js/qrcode.js` is [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) by
-Kazuhiko Arase (MIT), unchanged; it draws the TV's QR codes (Trakt sign-in, entering text from
-your phone, Continue on phone, an addon's Share and Configure).
+This is an independent community project for the Stremio addon ecosystem.

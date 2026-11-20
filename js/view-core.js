@@ -500,8 +500,12 @@ var ViewParts = {};
         // Settings a chip like them (name, then icon), after them
         function item(cls, key, label, icon, open, into) {
             var p = U.el('div', cls + ' focusable' + (key === active ? ' active' : ''));
+            var icons = { home: 'home', library: 'film', 'continue': 'home', calendar: 'calendar', movie: 'film', series: 'monitor', tv: 'rss', guide: 'list', radio: 'radio', sport: 'circle', youtube: 'video', local: 'hard-drive', discover: 'compass', search: 'search', settings: 'settings' };
+            var symbol = U.el('img', 'tab-ic');
+            symbol.src = 'css/icons/' + (icons[key] || 'circle') + '.svg';
+            symbol.setAttribute('alt', '');
+            p.appendChild(symbol);
             p.appendChild(document.createTextNode(label));
-            p.appendChild(U.el('span', 'tab-ic', icon));
             p.__onselect = open;
             p.__navDOWN = down;
             into.appendChild(p);

@@ -10,6 +10,7 @@ var App = (function () {
     function screenEl(name) { return U.byId('screen-' + name); }
 
     function showScreen(name) {
+        if (_current === 'home' && name !== 'home') { U.spinner(false); }
         if (name !== _current) { U.crumb(name); }
         ['home', 'discover', 'detail', 'search', 'settings', 'addaddon'].forEach(function (n) {
             var el = screenEl(n);
@@ -238,6 +239,9 @@ var App = (function () {
     }
 
     function actualStart() {
+        if (typeof StremioAccount !== 'undefined') {
+            StremioAccount.onChange(function (change) { if (change.addonsChanged) { Views.clearCatalogCache(); } });
+        }
         Player.init();
         Keys.init();
         Keys.setHandler(onKey);
@@ -248,6 +252,23 @@ var App = (function () {
         setTimeout(function () { if (Views.alertNewEpisodes && !Player.isActive()) { Views.alertNewEpisodes(); } }, 30000);
         showScreen('home');
         Views.renderHome();
+        function syncAccount() {
+            if (typeof StremioAccount === 'undefined' || !StremioAccount.isConnected()) { return; }
+            if (document.hidden) { return; }
+            if (Player.isActive()) { setTimeout(syncAccount, 30000); return; }
+            StremioAccount.sync().then(function (changes) {
+                if (!changes) { return; }
+                if (!changes.addonsChanged && changes.libraryChanged) { Views.markHomeDirty(); }
+                else if (!changes.addonsChanged) { return; }
+                if (_current === 'home' && !Player.isActive() && !Views.isModalOpen()) { Views.renderHome(); }
+            }, function () {});
+        }
+        setTimeout(syncAccount, 2000);
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden || Player.isActive() || typeof StremioAccount === 'undefined') { return; }
+            var profile = StremioAccount.profile();
+            if (profile && Date.now() - profile.syncedAt > 5 * 60 * 1000) { syncAccount(); }
+        }, false);
         U.mark('firstScreen');
         if (typeof LocalMedia !== 'undefined') { LocalMedia.watch(); }   // (a USB drive plugged in? the Local tab; nothing read from it)
         document.addEventListener('visibilitychange', function () { U.sessionState(document.hidden ? 'hidden' : 'running'); }, false);

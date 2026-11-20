@@ -21,6 +21,8 @@
     // other three are the catalog rows of that Stremio type, in the user's
     // Home-Feeds order/visibility. A tab only appears when it has content.
     var HOME_TABS = [
+        { key: 'home', icon: '', label: 'Home' },
+        { key: 'library', icon: '', label: 'My library' },
         { key: 'continue', icon: '▶', label: 'Watching' },   // (Continue Watching: short, the menu is full)
         { key: 'calendar', icon: '📅', label: 'Calendar' },   // (coming up, and what you watched: see calendarRows)
         { key: 'movie', icon: '🎬', label: 'Movies' },
@@ -39,7 +41,7 @@
     // rest (the tabs, Discover, Search) in yours. A saved order is kept as far as it goes: an
     // item it doesn't have (one added since) goes after the one it usually follows, and one
     // that no longer exists is dropped.
-    var MENU_ITEMS = HOME_TABS.filter(function (t) { return t.key !== 'continue'; }).map(function (t) { return t.key; }).concat(['discover', 'search']);
+    var MENU_ITEMS = HOME_TABS.filter(function (t) { return t.key !== 'home'; }).map(function (t) { return t.key; }).concat(['discover', 'search']);
     function menuOrder() {
         var out = [];
         (Stremio.getPrefs().menuOrder || []).forEach(function (k) { if (MENU_ITEMS.indexOf(k) !== -1 && out.indexOf(k) === -1) { out.push(k); } });
@@ -62,7 +64,7 @@
     function menuItems() {
         var tabs = availableTabs(), byKey = {}, out = [];
         tabs.forEach(function (t) { byKey[t.key] = t; });
-        if (byKey['continue']) { out.push({ key: 'continue', tab: byKey['continue'] }); }
+        if (byKey.home) { out.push({ key: 'home', tab: byKey.home }); }
         menuOrder().forEach(function (k) {
             if (k === 'discover' || k === 'search') { out.push({ key: k }); }
             else if (byKey[k]) { out.push({ key: k, tab: byKey[k] }); }
@@ -75,12 +77,12 @@
     // Tabs you hid (Settings › Appearance › Menu) aren't shown; Watching always is.
     function availableTabs() {
         var hidden = Stremio.getPrefs().hiddenTabs || [];
-        function shown(t) { return t.key === 'continue' || (hidden.indexOf(t.key) === -1 && (t.key !== 'guide' || hasGuide())); }
+        function shown(t) { return t.key === 'home' || (hidden.indexOf(t.key) === -1 && (t.key !== 'guide' || hasGuide()) && (t.key !== 'library' || (typeof StremioAccount !== 'undefined' && StremioAccount.isConnected()))); }
         if (_homeCatalogs === null || _homeFirstLoad) {   // first load still running
             return HOME_TABS.filter(function (t) { return shown(t) && (t.key !== 'local' || hasLocal()); });
         }
         return HOME_TABS.filter(function (t) {
-            return shown(t) && (t.key === 'continue' || t.key === 'calendar' || t.key === 'guide' || (t.key === 'local' ? hasLocal() : catsForTab(t.key).length > 0));
+            return shown(t) && (t.key === 'home' || t.key === 'library' || t.key === 'continue' || t.key === 'calendar' || t.key === 'guide' || (t.key === 'local' ? hasLocal() : catsForTab(t.key).length > 0));
         });
     }
 
@@ -153,13 +155,19 @@
     var HOME_MAX_AGE = 15 * 60 * 1000;
     var _homeLoadedAt = 0;
     var _homeLoading = false;
+    var _homeGeneration = 0;
 
     function markHomeDirty() { _homeDirty = true; }
     function homeStale() {
         return _homeCatalogs !== null && !_homeLoading && Date.now() - _homeLoadedAt > HOME_MAX_AGE;
     }
     function homeDirty() { return _homeDirty || homeStale(); }
-    function clearCatalogCache() { _homeCatalogs = null; _homeDirty = true; _reloadOnly = null; U.store.remove(HOME_SNAP_KEY); if (U.bigStore) { U.bigStore.remove(HOME_CACHE_KEY); } }
+    function clearCatalogCache() {
+        // A new account/addon set owns its own load; obsolete replies must not publish.
+        _homeGeneration++; _homeLoading = false; _homeFirstLoad = false;
+        _homeCatalogs = null; _homeDirty = true; _reloadOnly = null;
+        U.store.remove(HOME_SNAP_KEY); if (U.bigStore) { U.bigStore.remove(HOME_CACHE_KEY); }
+    }
     // One addon added, refreshed or removed (or an IPTV playlist changed, or the feeds
     // reordered): reload just its rows; every other row keeps what it has, with no request.
     // url: the addon ('local:iptv' for IPTV); none: nothing to fetch (only the set / order
@@ -167,9 +175,13 @@
     var _reloadOnly = null;   // { addon url: 1 } for the next reload, else a full one
     var _homeAddons = {};     // { addon url: 1 } the addons Home's last load had catalogs from
     function refreshAddonRows(url) {
-        if (_homeCatalogs === null) { clearCatalogCache(); return; }   // nothing loaded yet: a full load anyway
-        // an addon Home didn't load rows from (the first playlist added: IPTV): a full load, its tab with it
-        if (url && !_homeAddons[url]) { clearCatalogCache(); return; }
+        // A newly ready playlist can arrive during the first catalog load. Its
+        // invalidation cancels that generation, so visible Home needs a replacement.
+        if (_homeCatalogs === null || (url && !_homeAddons[url])) {
+            clearCatalogCache();
+            if (_current() === scr('home') && !isModalOpen() && !Player.isActive()) { loadHomeCatalogs(); }
+            return;
+        }
         _reloadOnly = _reloadOnly || {};
         if (url) { _reloadOnly[url] = 1; }
         _homeDirty = true;
@@ -628,7 +640,7 @@
         var preview = { name: e.name, poster: e.poster, type: e.type };
         var target = e.id !== base ? e.id : null;
         c.__onselect = function () {
-            App.openDetail(e.type, base, preview, target, e.url ? { resume: e } : null);
+            App.openDetail(e.type, base, preview, target, (e.url || e.torrent) ? { resume: e } : null);
         };
         c.__onlongpress = function () { continueActions(e, base, preview, target, c); };
         c.__cwKey = showKey(e);
@@ -794,6 +806,12 @@
             if (e.position > 0) { add(e.type, e.id, e.updated || 0, 'partial', e.duration ? Math.round(e.position / e.duration * 100) : 0); }
         });
         Player.watchedSince(since).forEach(function (w) { add(w.type, w.id, w.at, 'here'); });
+        if (typeof StremioAccount !== 'undefined' && StremioAccount.historySince) {
+            StremioAccount.historySince(since).forEach(function (w) {
+                names[w.id] = names[w.id] || w.name; posters[w.id] = posters[w.id] || w.poster;
+                add(w.type, w.id, w.at, 'stremio');
+            });
+        }
         if (typeof Trakt !== 'undefined' && Trakt.isConnected() && Trakt.watchedSince) { Trakt.watchedSince(since).forEach(function (w) { add(w.type, w.id, w.at, 'trakt'); }); }
         var info = showInfoAll();
         return Object.keys(all).map(function (k) {
@@ -845,7 +863,7 @@
                 if (tag) { c.appendChild(U.el('div', 'card-new card-code', tag)); }
                 var what = partial ? 'Stopped part-way' + (latest.pct ? ' (' + latest.pct + '%)' : '') + (codes.length ? ': ' + codes[0] : '')
                     : 'Watched' + (codes.length ? ' ' + codes.slice().reverse().join(', ') : '');
-                var where = t.eps.every(function (x) { return x.how === 'trakt'; }) ? '   ·   on Trakt' : '';
+                var where = t.eps.every(function (x) { return x.how === 'trakt'; }) ? '   ·   on Trakt' : t.eps.every(function (x) { return x.how === 'stremio'; }) ? '   ·   on Stremio' : '';
                 c.__meta = { name: t.name, description: what + where };
                 c.__onselect = function () { App.openDetail(t.type, t.base, { name: c.__meta.name, poster: t.poster, type: t.type }, t.type === 'series' && latest.id !== t.base ? latest.id : null); };
                 if (!t.name) { unnamed.push({ t: t, c: c }); }
@@ -1107,9 +1125,13 @@
         _moving = null;
         m.card.classList.remove('moving');
         if (keep) {
-            // (this row's order, then Upcoming's titles where they were: they come back up in it)
+            // Home shows only twelve cards. Preserve the rest of Watching (including
+            // Upcoming) so rebuilding does not treat those undisplayed titles as new.
             var mine = cardsOf(m.grid).map(function (c) { return c.__cwKey; }).filter(Boolean);
-            var rest = (cwOrder() || []).filter(function (k) { return mine.indexOf(k) === -1; });
+            var rest = [];
+            continueEntries().map(showKey).concat(cwOrder() || []).forEach(function (k) {
+                if (mine.indexOf(k) === -1 && rest.indexOf(k) === -1) { rest.push(k); }
+            });
             U.store.set(CW_ORDER_KEY, mine.concat(rest).slice(0, CW_ORDER_MAX));
         } else {
             m.before.forEach(function (c) { m.grid.appendChild(c); });
@@ -1228,7 +1250,13 @@
         } else {
             rows = U.el('div', 'rows');
             s.appendChild(rows);
-            if (_homeTab === 'local') {
+            if (_homeTab === 'home') {
+                dashboardRows(rows);
+            } else if (_homeTab === 'library') {
+                var libraryCats = libraryCatalogs();
+                if (libraryCats.length) { appendRows(rows, libraryCats, 0); }
+                else { rows.appendChild(U.el('div', 'row-empty', 'Your Stremio library is empty or has not synced yet. Settings → Stremio account → Sync.')); }
+            } else if (_homeTab === 'local') {
                 localRows(rows);
             } else if (_homeTab === 'calendar') {
                 calendarRows(rows);
@@ -1298,7 +1326,8 @@
         if (m.name || m.title) { box.classList.add('on'); } else { box.classList.remove('on'); }   // shaded only while describing a title
         var t = box.children[0], name = m.name || m.title || '';
         U.clear(t);
-        var logoSrc = U.cardImage(m.logo, 'logo');
+        // A readable title appears immediately; no extra logo download while browsing.
+        var logoSrc = null;
         if (logoSrc) {   // the title's logo when it has one; its name if that fails to load
             var img = U.el('img', 'home-info-logo');
             img.onerror = function () { if (img.parentNode === t) { U.clear(t); t.textContent = name; } };
@@ -1316,12 +1345,13 @@
         box.children[1].textContent = bits.join('   ·   ');
         box.children[2].textContent = desc;
         // a program's picture from the TV guide (the Guide tab's focused one, a channel's now)
-        var picSrc = m.picture || (g && g.now && g.now.picture) || '', pic = box.querySelector('.home-info-pic');
+        var picSrc = m.picture || (g && g.now && g.now.picture) || m.background || '', pic = box.querySelector('.home-info-pic');
         if (!picSrc) { if (pic) { pic.className = 'home-info-pic hidden'; } box.classList.remove('has-pic'); return; }
+        if (pic && pic.__src !== picSrc) { box.removeChild(pic); pic = null; }
         if (!pic) { pic = U.el('img', 'home-info-pic'); pic.onerror = function () { pic.className = 'home-info-pic hidden'; box.classList.remove('has-pic'); }; box.appendChild(pic); }
         pic.className = 'home-info-pic';
         box.classList.add('has-pic');
-        if (pic.__src !== picSrc) { pic.__src = picSrc; U.deferImage(pic, U.cardImage(picSrc, 'still'), true); }
+        if (pic.__src !== picSrc) { pic.__src = picSrc; U.deferImage(pic, U.cardImage(picSrc, 'landscape'), true); }
     }
     if (typeof EPG !== 'undefined') {   // (the focused channel's: drawn again when its guide arrives)
         var _hadGuide = false;
@@ -1337,7 +1367,7 @@
         });
     }
     Focus.onFocus(function (node) {
-        if (!node || !scr('home').contains(node)) { return; }
+        if (!node || !node.__meta || !scr('home').contains(node)) { return; }
         if (_homeInfoTimer) { clearTimeout(_homeInfoTimer); }
         _homeInfoTimer = setTimeout(function () { _homeInfoTimer = null; fillHomeInfo(node.__meta); }, 120);
     });
@@ -1365,6 +1395,7 @@
     // Everything the tab on screen shows from the catalogs (which titles, in which rows),
     // to tell whether a refresh changed it. Continue Watching shows none of it.
     function shownSig() {
+        if (_homeTab === 'home') { return 'home#' + dashboardCatalogs().map(function (c) { return c.name + ':' + c.metas.map(function (m) { return m.id; }).join(','); }).join('|'); }
         if (_homeTab === 'continue' || _homeTab === 'calendar' || _homeTab === 'guide') { return _homeTab; }
         return _homeTab + '#' + catsForTab(_homeTab).map(function (c) {
             return c.name + ':' + c.metas.map(function (m) { return m.id + '/' + (m.poster || ''); }).join(',');
@@ -1374,10 +1405,11 @@
     // The tabs that aren't drawn from catalogs (Watching, Calendar, Guide, Local): catalogs that
     // arrive don't change them, only the top menu might (a tab coming). Redrawing one rebuilds it
     // whole (the Guide asks for its programs again): a flicker, so not unless the menu changed.
-    function ownTab(t) { return t === 'continue' || t === 'calendar' || t === 'guide' || t === 'local'; }
+    function ownTab(t) { return t === 'library' || t === 'continue' || t === 'calendar' || t === 'guide' || t === 'local'; }
     function menuSig() { return availableTabs().map(function (t) { return t.key; }).join(','); }
     function ownTabStill() { return ownTab(_homeTab) && menuSig() === _renderedMenu; }
     function tabSig() {
+        if (_homeTab === 'home') { return shownSig(); }
         return _homeTab + '#' + catsForTab(_homeTab).map(function (c) { return c.name + ':' + c.metas.length; }).join('|');
     }
 
@@ -1389,7 +1421,7 @@
     // A big IPTV playlist takes a while to read: say how far along it is under the spinner.
     function channelsText(n) { return 'Reading IPTV playlists…  ' + ('' + n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' channels'; }
     if (typeof IPTV !== 'undefined' && IPTV.onProgress) {
-        IPTV.onProgress(function (n) { if (_homeFirstLoad) { U.spinner(true, channelsText(n)); } });
+        IPTV.onProgress(function (n) { if (_homeTab !== 'library' && _homeFirstLoad && !(_homeCatalogs || []).some(function (c) { return c.metas && c.metas.length; }) && _current() === scr('home') && !Player.isActive() && !isModalOpen()) { U.spinner(true, channelsText(n)); } });
     }
     // The IPTV playlists read after your addons loaded (they aren't waited for): their rows join.
     if (typeof Stremio !== 'undefined' && Stremio.onIptvReady) { Stremio.onIptvReady(function () { refreshAddonRows('local:iptv'); }); }
@@ -1397,6 +1429,7 @@
     function loadHomeCatalogs() {
         if (_homeLoading) { return; }
         _homeLoading = true;
+        var generation = _homeGeneration;
         var first = (_homeCatalogs === null);
         var only = first ? null : _reloadOnly;   // a partial reload: just these addons' rows
         _reloadOnly = null;
@@ -1409,17 +1442,18 @@
                 : (old[cat.type + '|' + cat.name] || []);
         }
         var before = first ? null : shownSig();
-        if (first) { _homeCatalogs = []; U.spinner(true); }
         var s = scr('home');
+        if (first) { _homeCatalogs = []; if (onHome() && _homeTab !== 'library') { U.spinner(true); } }
         function done() {
             _homeLoadedAt = Date.now();
             _homeLoading = false;
             _homeFirstLoad = false;
-            if (first) { U.spinner(false); }
+            if (first && onHome()) { U.spinner(false); }
             if (_reloadOnly && onHome()) { setTimeout(loadHomeCatalogs, 0); }   // (rows asked for meanwhile: the IPTV ones, read after the addons)
         }
         function onHome() { return _current() === s && !isModalOpen() && !Player.isActive(); }
         Stremio.catalogsForHome().then(function (cats) {
+            if (generation !== _homeGeneration) { return; }
             _homeAddons = {};
             cats.forEach(function (cat) { if (cat.addon && cat.addon.url) { _homeAddons[cat.addon.url] = 1; } });
             var acc = cats.map(function (cat) { return copyCat({ name: cat.name, type: cat.type, yt: isYouTubeCat(cat) }, []); });
@@ -1428,15 +1462,17 @@
             // it held by a "Loading…" placeholder, so nothing jumps when it comes), and redraw when
             // that changes the tab on screen.
             function partial() {
+                if (generation !== _homeGeneration) { return; }
                 var n = arrived.filter(Boolean).length, last = arrived.lastIndexOf(true);
                 if (!first || n <= shown) { return; }
                 shown = n;
                 var now = acc.slice(0, last + 1).map(function (c, i) { return arrived[i] ? c : copyCat(c, [], { loading: true }); });
                 _homeCatalogs = splitOtherCatalogs(now).filter(function (c) { return c.loading || (c.metas && c.metas.length); });
+                if (onHome() && _homeCatalogs.some(function (c) { return c.metas && c.metas.length; })) { U.spinner(false); }
                 if (partialTimer) { return; }
                 partialTimer = setTimeout(function () {
                     partialTimer = null;
-                    if (!_homeFirstLoad) { return; }   // everything arrived meanwhile: drawn below
+                    if (generation !== _homeGeneration || !_homeFirstLoad) { return; }   // superseded, or everything arrived meanwhile
                     if (ownTabStill()) { _tabRows = {}; return; }   // (Watching, the Guide…: as they are)
                     var keep = {};
                     if (tabSig() === _renderedSig) { keep[_homeTab] = _tabRows[_homeTab]; }
@@ -1446,6 +1482,7 @@
             }
             var tasks = cats.map(function (cat, i) {
                 return function () {
+                    if (generation !== _homeGeneration) { return Promise.resolve(); }
                     if (only && !only[cat.addon.url]) {   // not the addon that changed: keep its rows
                         acc[i].metas = oldFor(cat); arrived[i] = true;
                         return Promise.resolve();
@@ -1456,6 +1493,7 @@
                 };
             });
             U.settleAll(tasks, 3).then(function () {
+                if (generation !== _homeGeneration) { return; }
                 _homeCatalogs = splitOtherCatalogs(acc).filter(function (c) { return c.metas && c.metas.length; });
                 done();
                 saveHomeCache();
@@ -1472,6 +1510,7 @@
                 else { _homeDirty = true; }
             });
         }, function () {
+            if (generation !== _homeGeneration) { return; }
             done();
             if (first) { U.toast('Failed to load addons. Check network / Settings.'); }
         });
@@ -1541,6 +1580,28 @@
         cards.forEach(function (c) { scroller.appendChild(c); });
         row.appendChild(scroller);
         return row;
+    }
+
+    function dashboardCatalogs() {
+        return (_homeCatalogs || []).filter(function (c) { return (c.type === 'movie' || c.type === 'series') && c.metas && c.metas.length; }).slice(0, 6);
+    }
+    function libraryCatalogs() {
+        var library = StremioAccount.library(), cats = [];
+        ['movie', 'series'].forEach(function (kind) {
+            var titles = library.filter(function (m) { return m.type === kind; });
+            for (var at = 0; at < titles.length; at += 18) { cats.push({ name: 'My library · ' + (kind === 'movie' ? 'Movies' : 'Series') + ' · ' + (at + 1) + '–' + Math.min(at + 18, titles.length), type: kind, metas: titles.slice(at, at + 18) }); }
+        });
+        return cats;
+    }
+    function dashboardRows(rows) {
+        var watching = continueEntries().filter(function (e) { return !notOutYet(e); }).slice(0, 12);
+        if (watching.length) { var art = homeArt(); rows.appendChild(buildRow(CW_TITLE, watching.map(function (e) { return continueCard(e, art); }))); }
+        if (typeof StremioAccount !== 'undefined' && StremioAccount.library) {
+            var library = StremioAccount.library().slice(0, 24);
+            if (library.length) { rows.appendChild(buildRow('My Stremio library', library.map(function (m) { return posterCard(m, m.type); }))); }
+        }
+        dashboardCatalogs().forEach(function (c) { rows.appendChild(buildRow(c.name, c.metas.slice(0, 18).map(function (m) { return posterCard(m, c.type); }))); });
+        if (!rows.firstChild) { rows.appendChild(U.el('div', 'row-empty', _homeLoading ? 'Loading your movies and series…' : 'Your movies and series will appear here. Add a catalog in Settings → Content → Addons.')); }
     }
 
     // ----- published for the other parts (and js/views.js) -----

@@ -359,7 +359,8 @@
         s.appendChild(buildTopMenu('settings'));   // shared top menu (UP reaches it; no Back button)
         var wrap = U.el('div', 'settings-wrap');
         s.appendChild(wrap);
-        if (_settingsSection === 'addons') { settingsAddons(wrap); }
+        if (_settingsSection === 'account') { settingsAccount(wrap); }
+        else if (_settingsSection === 'addons') { settingsAddons(wrap); }
         else if (_settingsSection === 'iptv') { settingsIptv(wrap); }
         else if (_settingsSection === 'youtube') { settingsYouTube(wrap); }
         else if (_settingsSection === 'integrations') { settingsIntegrations(wrap); }
@@ -420,6 +421,8 @@
     var TIZENBREW_NOTE = '⚠ Installed with TizenBrew: other TizenBrew modules can read what StremioK saves, including API keys and addon links with their tokens. Only install modules you trust; the sideloaded app keeps its data to itself.';
     function settingsMenu(wrap) {
         wrap.appendChild(U.el('h2', null, 'Settings'));
+        var account = typeof StremioAccount !== 'undefined' && StremioAccount.profile();
+        wrap.appendChild(sectionRow('Stremio account', account ? 'Connected: ' + account.label : 'Sign in with a QR code · your library and account addons on this TV', 'account'));
         wrap.appendChild(sectionRow('Content', 'Addons, API keys, IPTV playlists, streaming apps, importing a configuration file', 'content'));
         wrap.appendChild(sectionRow('Playback', 'Audio and subtitles, source ranking, feed sources, formats', 'playback'));
         wrap.appendChild(sectionRow('Appearance', 'Background, accent color, poster orientation, Home feeds, Search results', 'appearance'));
@@ -587,11 +590,11 @@
     // Import addons from your Stremio account (js/stremio-account.js): a QR code of Stremio's
     // sign-in link, asked until you approve on your phone; then the account's addons to tick
     // (none ticked; yours already shown as such); the account signed out as soon as it's read.
-    function stremioImport() {
+    function stremioImport(persistent) {
         var existing = document.querySelector('.modal-overlay');
         if (existing) { existing.parentNode.removeChild(existing); }
         var overlay = U.el('div', 'modal-overlay'), box = U.el('div', 'modal-box');
-        box.appendChild(U.el('div', 'modal-msg', 'Import addons from your Stremio account'));
+        box.appendChild(U.el('div', 'modal-msg', persistent === true ? 'Sign in to Stremio' : 'Import addons from your Stremio account'));
         var body = U.el('div', 'trakt-connect');
         body.appendChild(U.el('div', 'tc-line', 'Asking Stremio for a code…'));
         box.appendChild(body);
@@ -602,13 +605,13 @@
         overlay.appendChild(box);
         document.body.appendChild(overlay);
         showModal(overlay, cancel);
-        var gone = false;
-        onModalClose(function () { gone = true; });
+        var gone = false, connectingKey = null;
+        onModalClose(function () { gone = true; if (connectingKey) { StremioAccount.cancelConnection(connectingKey); connectingKey = null; } });
         function stopped() { return gone; }
         function fail(e) {
             if (gone) { return; }
             U.clear(body);
-            body.appendChild(U.el('div', 'tc-line', 'Couldn’t import: ' + ((e && e.message) || 'unknown')));
+            body.appendChild(U.el('div', 'tc-line', (persistent === true ? 'Couldn’t connect: ' : 'Couldn’t import: ') + ((e && e.message) || 'unknown')));
         }
         StremioAccount.start().then(function (c) {
             if (gone) { return; }
@@ -631,6 +634,16 @@
             return StremioAccount.wait(c.code, stopped).then(function (key) {
                 if (gone) { StremioAccount.signOut(key); return; }
                 U.clear(body);
+                if (persistent === true) {
+                    connectingKey = key;
+                    body.appendChild(U.el('div', 'tc-line', 'Connecting your account and reading your library…'));
+                    return StremioAccount.connect(key, stopped).then(function (changes) {
+                        connectingKey = null;
+                        if (gone) { return; }
+                        closeModal(); if (changes && changes.addonsChanged) { clearCatalogCache(); } else { markHomeDirty(); }
+                        _settingsSection = 'account'; renderSettings(); U.toast('Connected to Stremio');
+                    });
+                }
                 body.appendChild(U.el('div', 'tc-line', 'Reading your addons…'));
                 var read = StremioAccount.addons(key);
                 read.then(function () { StremioAccount.signOut(key); }, function () { StremioAccount.signOut(key); });   // (signed out as soon as it's read)
@@ -654,6 +667,23 @@
                 });
             });
         }).then(null, function (e) { if (!e || e.message !== 'stopped') { fail(e); } });
+    }
+    function settingsAccount(wrap) {
+        wrap.appendChild(U.el('h2', null, 'Stremio account'));
+        var profile = StremioAccount.profile();
+        function redraw() { if (V._current() === scr('settings') && _settingsSection === 'account' && document.documentElement.contains(wrap) && !isModalOpen()) { renderSettings(); } }
+        function action(title, desc, fn) { var row = U.el('div', 'addon-item focusable'); row.appendChild(U.el('div', 'a-name', title)); row.appendChild(U.el('div', 'a-url', desc)); row.__onselect = fn; wrap.appendChild(row); }
+        if (!profile) {
+            action('Sign in with QR code', 'Approve on Stremio’s website using your phone. This TV keeps the session until you sign out.', function () { stremioImport(true); });
+        } else {
+            wrap.appendChild(U.el('div', 'hint', 'Connected as ' + profile.label));
+            action('Sync library, progress and addons', (profile.syncError ? 'Last sync failed. Cached library remains available. ' : '') + (profile.syncedAt ? 'Last synced ' + U.dayLabel(profile.syncedAt) + '. ' : '') + 'Account library: ' + StremioAccount.library().length + ' titles.', function () {
+                U.toast('Syncing Stremio…'); StremioAccount.sync().then(function (changes) { if (changes && changes.addonsChanged) { clearCatalogCache(); } else { markHomeDirty(); } redraw(); U.toast('Stremio library and addons updated'); }, function (e) { redraw(); U.toast(e.message, 5000); });
+            });
+            action('Sign out of this TV', 'Clears this TV’s account session and library cache. Installed addons and local playback history stay on the TV.', function () { StremioAccount.disconnect(); markHomeDirty(); redraw(); });
+        }
+        wrap.appendChild(U.el('div', 'hint', 'Your library appears on Home; account progress appears in Watching and watched episodes are marked. Calendar shows the last account viewing per title. Newer TV progress stays intact. This sync only reads the account and never writes cloud history. No PC or phone is needed after sign-in.'));
+        focusSettings();
     }
     function shortHost(u) { var p = U.parseUrl(u); return p ? p.host : ''; }
 

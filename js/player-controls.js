@@ -936,7 +936,7 @@
         if (S.ctx && S.ctx.zapTo) {
             _chDigits += n;
             if (_chTimer) { clearTimeout(_chTimer); _chTimer = null; }
-            function go() { var k = +_chDigits; _chDigits = ''; if (_chTimer) { clearTimeout(_chTimer); _chTimer = null; } if (k > 0 && S.ctx && S.ctx.zapTo) { S.ctx.zapTo(k); } }
+            var go = function () { var k = +_chDigits; _chDigits = ''; if (_chTimer) { clearTimeout(_chTimer); _chTimer = null; } if (k > 0 && S.ctx && S.ctx.zapTo) { S.ctx.zapTo(k); } };
             if (_chDigits.length >= 2) { go(); return; }
             U.toast('Channel ' + _chDigits + '_', CH_WAIT_MS);
             _chTimer = setTimeout(go, CH_WAIT_MS);
@@ -947,6 +947,7 @@
     }
     function handleKey(action) {
         if (!S.active) { return true; }
+        if (S.torrentPreparing) { if (action === 'BACK' || action === 'STOP') { exit(); } return true; }
         // Dedicated transport keys ALWAYS control playback, even with an overlay open (#9).
         switch (action) {
             case 'PLAY': play_(); if (_barOpen) { renderBar(); barIdle(); } showOSD(false); return true;

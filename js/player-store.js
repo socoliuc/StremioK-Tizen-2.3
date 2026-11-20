@@ -14,7 +14,11 @@
     // watched", at 0). Trakt's history (when connected) is weighed against it by time: marked
     // watched here: watched; marked not watched here: watched only if Trakt has it watched
     // since (on another device); no mark here: as Trakt has it. null: neither knows it.
-    function traktAt(type, id) { return (typeof Trakt !== 'undefined' && Trakt.isConnected && Trakt.isConnected() && Trakt.watchedAt) ? Trakt.watchedAt(type, id) : 0; }
+    function traktAt(type, id) {
+        var trakt = (typeof Trakt !== 'undefined' && Trakt.isConnected && Trakt.isConnected() && Trakt.watchedAt) ? Trakt.watchedAt(type, id) : 0;
+        var account = typeof StremioAccount !== 'undefined' && StremioAccount.watchedAt ? StremioAccount.watchedAt(type, id) : 0;
+        return Math.max(trakt, account);
+    }
     function watchedState(type, id) {
         var v = watchedAll()[type + ':' + id], t = traktAt(type, id);
         if (typeof v === 'number' && v > 0) { return true; }
@@ -80,7 +84,7 @@
     function pick3(list, id) { for (var i = 0; i < list.length; i++) { if (list[i][0] === id) { return list[i]; } } return list[0]; }
     function getSubCfg() {
         var d = U.store.get(SUBCFG_KEY, {}) || {};
-        return { lang: d.lang || 'off', lang2: d.lang2 || 'none', size: d.size || 'medium',   // (lang2: the second choice, 'none' = none)
+        return { lang: d.lang || 'en', lang2: d.lang2 || 'none', size: d.size || 'medium',   // (lang2: the second choice, 'none' = none)
             color: pick3(SUB_COLORS, d.color)[0], bg: pick3(SUB_BGS, d.bg || 'light')[0],
             edge: pick3(SUB_EDGES, d.edge)[0], pos: pick3(SUB_POSITIONS, d.pos || 'bottom')[0],   // (Bottom unless chosen: Lower comes first in the list)
             font: subFontFamily(d.font) ? d.font : 'default',   // an unknown font -> TV default
@@ -110,6 +114,12 @@
     var _subCfgVer = 0;   // bumped on every change: a styled line knows it's up to date
     function setSubCfg(cfg) { U.store.set(SUBCFG_KEY, cfg); _subCfgVer++; }
     function subCfgVersion() { return _subCfgVer; }
+    // Requested upgrade default, once. Later manual choices (including Off) survive.
+    function applyTV25Defaults() {
+        if (U.store.get('stremiok.tv25.english', false)) { return; }
+        var cfg = getSubCfg(); cfg.lang = 'en';
+        if (U.store.set(SUBCFG_KEY, cfg) !== false) { U.store.set('stremiok.tv25.english', true); _subCfgVer++; }
+    }
 
     // Preferred audio language ('default' = keep the stream's first audio track) and a
     // second choice used when the first isn't on the stream ('none' = no second choice).
@@ -149,28 +159,59 @@
     // e = { id, type, name, poster, parent }. Never overwrites real progress.
     function addToContinue(e) {
         var all = progressAll(), k = e.type + ':' + e.id;
-        if (all[k]) { all[k].added = true; }
+        if (all[k]) { all[k].added = true; all[k].updated = Date.now(); }
         else { all[k] = { id: e.id, type: e.type, name: e.name, poster: e.poster, background: e.background, parent: e.parent, position: 0, duration: 0, updated: Date.now(), added: true }; }
+        var dismissed = U.store.get(DISMISSED_KEY, {}) || {};
+        delete dismissed[k]; delete dismissed[progressParent(e.type, e.id, all[k])];
+        U.store.set(DISMISSED_KEY, dismissed);
         U.store.set(PROGRESS_KEY, all);
     }
 
-    function progressFor(type, id) { return progressAll()[type + ':' + id] || null; }
+    var DISMISSED_KEY = 'stremiok.account.dismissed';
+    function progressParent(type, id, entry) { return type + ':@' + ((entry && entry.parent) || (type === 'series' ? id.replace(/:\d+:\d+$/, '') : id)); }
+    function accountProgress(type, id) {
+        var remote = typeof StremioAccount !== 'undefined' && StremioAccount.progressFor ? StremioAccount.progressFor(type, id) : null;
+        if (!remote) { return null; }
+        var k = type + ':' + id, dismissed = U.store.get(DISMISSED_KEY, {}) || {}, mark = watchedAll()[k];
+        return (dismissed[k] || 0) >= remote.updated || (dismissed[progressParent(type, id, remote)] || 0) >= remote.updated || (typeof mark === 'number' && mark > 0 && mark >= remote.updated) ? null : remote;
+    }
+    function progressFor(type, id) {
+        var local = progressAll()[type + ':' + id], remote = accountProgress(type, id);
+        return remote && (!local || remote.updated > local.updated) ? remote : local || null;
+    }
 
     function getResume(type, id) {
-        var e = progressAll()[type + ':' + id];
+        var e = progressFor(type, id);
         return e ? e.position : 0;
     }
 
     function removeProgress(type, id) {
         var all = progressAll();
+        var entry = all[type + ':' + id] || (typeof StremioAccount !== 'undefined' && StremioAccount.progressFor ? StremioAccount.progressFor(type, id) : null);
         delete all[type + ':' + id];
         U.store.set(PROGRESS_KEY, all);
+        var dismissed = U.store.get(DISMISSED_KEY, {}) || {};
+        dismissed[type + ':' + id] = Date.now();
+        dismissed[progressParent(type, id, entry)] = Date.now();
+        var keys = Object.keys(dismissed).sort(function (a, b) { return dismissed[b] - dismissed[a]; });
+        keys.slice(500).forEach(function (k) { delete dismissed[k]; });
+        U.store.set(DISMISSED_KEY, dismissed);
     }
 
     function continueList() {
         var all = progressAll();
-        var arr = [];
-        for (var k in all) { if (Object.prototype.hasOwnProperty.call(all, k)) { arr.push(all[k]); } }
+        var arr = [], dismissed = U.store.get(DISMISSED_KEY, {}) || {};
+        for (var k in all) { if (Object.prototype.hasOwnProperty.call(all, k) && !((dismissed[progressParent(all[k].type, all[k].id, all[k])] || 0) >= all[k].updated)) { arr.push(all[k]); } }
+        if (typeof StremioAccount !== 'undefined' && StremioAccount.continueList) {
+            var parentTimes = {}, remoteTimes = {}, cloud = [];
+            arr.forEach(function (e) { var key = e.type + ':' + (e.parent || e.id.split(':')[0]); parentTimes[key] = Math.max(parentTimes[key] || 0, e.updated || 0); });
+            StremioAccount.continueList().forEach(function (e) {
+                var key = e.type + ':' + (e.parent || e.id), accepted = accountProgress(e.type, e.id);
+                if (!accepted || (parentTimes[key] || 0) >= e.updated) { return; }
+                remoteTimes[key] = e.updated; cloud.push(e);
+            });
+            arr = arr.filter(function (e) { return !(remoteTimes[e.type + ':' + (e.parent || e.id.split(':')[0])] > e.updated); }).concat(cloud);
+        }
         arr.sort(function (a, b) { return b.updated - a.updated; });
         return arr;
     }
@@ -288,4 +329,5 @@
     P.aspectDef = aspectDef; P.aspectNow = aspectNow; P.setAspectNow = setAspectNow; P.SUB_FONTS = SUB_FONTS; P.SUB_COLORS = SUB_COLORS; P.SUB_BGS = SUB_BGS;
     P.SUB_EDGES = SUB_EDGES; P.SUB_POSITIONS = SUB_POSITIONS; P.ASPECTS = ASPECTS;
     P.isPrivate = isPrivate; P.setPrivate = setPrivate; P.privateNow = privateNow; P.subCfgVersion = subCfgVersion;
+    P.applyTV25Defaults = applyTV25Defaults;
 })(PlayerParts);

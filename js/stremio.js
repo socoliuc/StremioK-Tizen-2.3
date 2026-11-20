@@ -4,6 +4,11 @@
 var Stremio = (function () {
     'use strict';
 
+    var sourceHealth = typeof StremioSourceHealth !== 'undefined' ? StremioSourceHealth.create({
+        getItem: function (k) { return JSON.stringify(U.store.get(k, [])); },
+        setItem: function (k, v) { U.store.set(k, JSON.parse(v)); }
+    }) : null;
+
     var ADDONS_KEY = 'stremiok.addons';
 
     // Defaults for a fresh install. Cinemeta = catalogs + metadata, OpenSubtitles v3 =
@@ -287,7 +292,7 @@ var Stremio = (function () {
     // into your home network is dropped, at any depth: a picture, a link in a field, a source
     // or subtitle track (the whole entry), an episode's own sources.
     var APP_FIELDS = {};
-    ['_addon', '_addonPos', '_addonRank', '_also', '_cardImage', '_posterAlt', '_from', '_headers', '_keepStream', '_playlistId', '_reported', '_yt', '_file',
+    ['_addon', '_addonPos', '_addonRank', '_also', '_cardImage', '_posterAlt', '_from', '_headers', '_keepStream', '_playlistId', '_reported', '_yt', '_file', '_torrentAllowLocal',
         '_group', '_local', '_localSubs', '_tmdbWhere', '_trakt', '_dupes', '_restoreKey', '_current', '_autoFocus', '_epFocus', '_focusNp', '_focusPill',
         '_focusSeason', '_focusTrailer', '_earlier', '_localFile', 'stale', 'ytPage'].forEach(function (k) { APP_FIELDS[k] = 1; });
     function fieldSet(list) { var o = {}; list.forEach(function (k) { o[k] = 1; }); return o; }
@@ -775,6 +780,7 @@ var Stremio = (function () {
     var RANK_CRITERIA = [
         ['res', 'Resolution (high to low)', '4K, 1440p, 1080p, 720p, SD, then unknown; at the top, the sources are grouped by resolution'],
         ['uncached', 'Not yet cached last', 'sources an addon marks as not cached on your debrid service yet (they can’t start right away)'],
+        ['health', 'Torrent availability', 'reported seeders and recent successful starts on this TV; recent failures rank lower. No extra network probes; counts are not a guarantee'],
         ['kind', 'Release type', 'remux > Blu-ray > web > unknown > TV rip, CAM rips far below'],
         ['hdr', 'HDR before SDR', 'HDR10 / HDR10+ / Dolby Vision first'],
         ['addon', 'Feed sources order', 'your order of the addons (at the bottom of this page)'],
@@ -970,6 +976,7 @@ var Stremio = (function () {
                                 return false;
                             });
                             arr.forEach(function (s, n) {
+                                s._torrentAllowLocal = !!a.__local || U.urlIsPrivate(a.base || a.url);
                                 s._addon = a.manifest.name || 'Addon'; s._addonRank = i; s._addonPos = n;
                                 // (a source that needs its own player settings: its User-Agent and Referer, as an IPTV channel's)
                                 var ph = s.behaviorHints && s.behaviorHints.proxyHeaders, h = ph && ph.request ? U.sanitizeHeaders(ph.request) : null;
@@ -1061,7 +1068,7 @@ var Stremio = (function () {
     var KEPT_KEY = 'stremiok.keptsrc', KEPT_PER = 3, KEPT_TITLES = 150;
     var KEPT_SKIP = ['_addonRank', '_addonPos', '_also', '_earlier', '_dupes'];
     function keptAll() { var k = U.store.get(KEPT_KEY, {}); return (k && typeof k === 'object' && !Array.isArray(k)) ? k : {}; }
-    function sourceId(st) { var bh = st.behaviorHints || {}; return (bh.filename && bh.videoSize) ? 'f|' + ('' + bh.filename).toLowerCase() + '|' + bh.videoSize : 'u|' + st.url; }
+    function sourceId(st) { if (/^[a-f0-9]{40}$/i.test(st.infoHash || '')) { return 'h|' + st.infoHash.toLowerCase() + '|' + (st.fileIdx == null ? '' : st.fileIdx); } var bh = st.behaviorHints || {}; return (bh.filename && bh.videoSize) ? 'f|' + ('' + bh.filename).toLowerCase() + '|' + bh.videoSize : 'u|' + st.url; }
     function keepSource(type, id, st) {
         if (!st || typeof st.url !== 'string' || !/^https?:\/\//i.test(st.url) || st._localFile || !st._addon) { return; }
         var copy = {};
@@ -1836,11 +1843,11 @@ var Stremio = (function () {
         return s;
     }
 
-    // A stream is directly playable on the TV only if it exposes an http(s) URL.
-    // Torrent (infoHash) / external-only streams need an engine this app doesn't embed.
+    // HTTP streams and BitTorrent v1 sources are supported by the TV-native engine.
     function isPlayable(stream) {
         if (typeof LocalMedia !== 'undefined' && LocalMedia.isLocalStream(stream)) { return true; }   // (a file on a USB drive: only one StremioK made)
-        return !!(stream && typeof stream.url === 'string' && /^https?:\/\//i.test(stream.url));
+        return !!(stream && ((typeof stream.url === 'string' && /^https?:\/\//i.test(stream.url)) ||
+            (/^[a-f0-9]{40}$/i.test(stream.infoHash || '') && typeof NativeBridge !== 'undefined' && NativeBridge.available())));
     }
 
     function streamLabel(stream) {
@@ -2069,6 +2076,7 @@ var Stremio = (function () {
     }
 
     return {
+        sourceHealth: sourceHealth,
         DEFAULT_ADDONS: DEFAULT_ADDONS, prettyType: prettyType,
         addonUrlProblem: function (v) { return U.urlProblem(v); },
         getAddonUrls: getAddonUrls, manifestProblem: function (url) { return _manifestProblem[url] || ''; }, manifestDetail: function (url) { return _manifestDetail[url] || ''; }, addAddon: addAddon, removeAddon: removeAddon, moveAddon: moveAddon, streamNotes: streamNotes, keepSource: keepSource, forgetSource: forgetSource, sourceId: sourceId, hasStreamAddons: hasStreamAddons, thirdPartyNote: thirdPartyNote, refreshAddons: refreshAddons, refreshAddon: refreshAddon,

@@ -78,6 +78,7 @@ var PlayerParts = {};
     var _osdTimer = null;
     var _seekRecovering = false;
     var _playToken = 0;      // invalidates callbacks from closed/replaced AVPlay attempts
+    var _torrentCancel = null;
     var _prefetchedNext = false; // the next episode's sources were requested
     var _lastTickMs = null;  // this attempt's last play time, and how much it has actually played (2 s: the
     var _playedMs = 0;       // source counts as played, reportStart; a seek's jump doesn't count)
@@ -99,6 +100,7 @@ var PlayerParts = {};
     var _pausedOnce = false; // paused since this was opened (it only happens after pauses)
 
     function init() {
+        if (P.applyTV25Defaults) { P.applyTV25Defaults(); }
         objEl = U.byId('av-player');
         S.videoEl = U.byId('html5-player');
         S.subsEl = U.byId('subs');
@@ -178,7 +180,7 @@ var PlayerParts = {};
         } else {
             all[k] = { id: S.ctx.id, type: S.ctx.type, name: S.ctx.name, poster: S.ctx.poster, background: S.ctx.background, parent: S.ctx.parent,
                        position: Math.floor(S.cur), duration: Math.floor(S.dur), updated: Date.now(),
-                       url: S.ctx.yt || S.ctx.url, headers: S.ctx._headers,   // the exact stream, to resume it directly (YouTube: its page)
+                       url: S.ctx._nativeTorrent ? undefined : (S.ctx.yt || S.ctx.url), torrent: S.ctx._nativeTorrent ? { infoHash: S.ctx.stream.infoHash, fileIdx: S.ctx.stream.fileIdx, sources: S.ctx.stream.sources, _torrentAllowLocal: S.ctx.stream._torrentAllowLocal } : undefined, headers: S.ctx._headers,   // the exact stream, to resume it directly (YouTube: its page)
                        fileHints: (P.fileHints && P.fileHints(S.ctx.subExtra)) || undefined,   // (its file, for subtitles made for it)
                        added: added || undefined };
         }
@@ -386,11 +388,11 @@ var PlayerParts = {};
     // is what's learned from it (s.stream, through ctx.learnFor); the title, its episodes and
     // whether it's private stay.
     var SOURCE_FIELDS = ['url', 'variantUrl', 'initialQualityHeight', 'yt', 'ytLang', '_headers', 'localSubs', 'localFile', 'subExtra', 'sourceSubs', 'formatInfo', 'onStarted', 'onFailed', 'stream',
-        '_reported', 'fromStart', 'resumeSec', 'switching'];
+        '_nativeTorrent', '_reported', '_healthTimedOut', 'fromStart', 'resumeSec', 'switching'];
     // keep: a source that didn't start gives way to the next (nextSourceOnFail): the same place to
     // resume, and Play from the start as it was.
     function replaceSource(s, keep) {
-        if (!S.active || !S.ctx || !s || !s.url) { return; }
+        if (!S.active || !S.ctx || !s || (!s.url && !(s.stream && s.stream.infoHash))) { return; }
         var old = S.ctx, ctx = {};
         Object.keys(old).forEach(function (k) { if (SOURCE_FIELDS.indexOf(k) === -1) { ctx[k] = old[k]; } });
         ctx.url = s.url; ctx.variantUrl = s.variantUrl; ctx.initialQualityHeight = s.initialQualityHeight;
@@ -411,6 +413,18 @@ var PlayerParts = {};
     }
 
     function play(ctx, onExit) {
+        _openedAt = 0;
+        if (S.active) {
+            saveProgress();
+            _playToken++;
+            if (_ticker) { clearInterval(_ticker); _ticker = null; }
+            if (_osdTimer) { clearTimeout(_osdTimer); _osdTimer = null; }
+            closeSubs();
+            if (useAV) { try { avplay.stop(); } catch (oldStop) {} try { avplay.close(); } catch (oldClose) {} }
+            else { try { S.videoEl.pause(); } catch (oldPause) {} S.videoEl.removeAttribute('src'); }
+        }
+        if (_torrentCancel) { _torrentCancel.cancel(); _torrentCancel = null; }
+        if (S.ctx && S.ctx._nativeTorrent && typeof NativeBridge !== 'undefined') { NativeBridge.stopTorrent(); }
         // Replacing a YouTube stream that's playing (CH+/CH− to the next channel): the TV's
         // player can freeze on an open straight after closing it, so settle first (startAV).
         var settle = !!(S.active && S.ctx && S.ctx.yt);
@@ -445,7 +459,27 @@ var PlayerParts = {};
         renderOSD();   // show the NEW title immediately (not the previous item's)
         U.spinner(true, ctx.switching ? 'Switching source…' : ctx.initialQualityHeight ? 'Opening stream at ' + ctx.initialQualityHeight + 'p…' : 'Opening stream…');
 
-        if (useAV) { startLive(ctx, settle); } else { startHTML5(ctx.url); }
+        if (!ctx.url && ctx.stream && /^[a-f0-9]{40}$/i.test(ctx.stream.infoHash || '') && typeof NativeBridge !== 'undefined') {
+            var torrentCancel = _torrentCancel = U.cancelToken();
+            S.torrentPreparing = true;
+            U.spinner(true, 'Connecting to torrent peers…');
+            NativeBridge.prepareTorrent(ctx.stream, torrentCancel).then(function (result) {
+                if (torrentCancel.cancelled || !S.active || S.ctx !== ctx) { return; }
+                _torrentCancel = null; S.torrentPreparing = false;
+                ctx.url = result.url; ctx._nativeTorrent = true;
+                if (useAV) { startLive(ctx, settle); } else { startHTML5(ctx.url); }
+            }).catch(function (error) {
+                if (torrentCancel.cancelled || !S.active || S.ctx !== ctx) { return; }
+                _torrentCancel = null; S.torrentPreparing = false;
+                if (!ctx.private && Stremio.sourceHealth) { Stremio.sourceHealth.record(ctx.stream, 'failure'); }
+                if (nextSourceOnFail()) { return; }
+                U.toast('Torrent could not start. Try a source with more peers.', 6000);
+                exit();
+            });
+        } else {
+            S.torrentPreparing = false;
+            if (useAV) { startLive(ctx, settle); } else { startHTML5(ctx.url); }
+        }
 
         // A YouTube video (not a live channel): its audio languages and its links (end screen,
         // cards) from the service, for the menu and the overlays (player-quality / -controls).
@@ -564,6 +598,8 @@ var PlayerParts = {};
         return (typeof LocalMedia !== 'undefined' && LocalMedia.openUrl) ? LocalMedia.openUrl(url, S.ctx && S.ctx.localFile && S.ctx.localFile.size) : url;
     }
     function startAV(url, settle) {
+        var root = document.documentElement;
+        if (!/(^|\s)tv23-video(\s|$)/.test(root.className)) { root.className += ' tv23-video'; }
         url = (S.ctx && S.ctx._relay && S.ctx._relayFor === url) ? S.ctx._relay : opened(url);   // (a live channel's sound repacked: see liveCheck)
         var token = ++_playToken;
         objEl.className = 'active';
@@ -585,6 +621,8 @@ var PlayerParts = {};
     function openAV(url, token) {
         try {
             avplay.open(url);
+            // Establish the video plane while IDLE, before prepare (required by this 2015 TV).
+            avplay.setDisplayRect(0, 0, 1920, 1080);
             // Best-effort per-stream HTTP headers (some IPTV channels need a UA / Referer).
             // Guarded: unsupported properties simply throw and are ignored.
             try {
@@ -595,6 +633,7 @@ var PlayerParts = {};
             // A bigger buffer (Settings › Playback › Seeking & buffering): seconds loaded before it
             // starts, and before it goes on after running dry (the TV's own when Normal)
             var buf = BUFFERS[P.playerCfg().buffer];
+            if (!buf && S.ctx && S.ctx._nativeTorrent) { buf = BUFFERS.more; }
             if (buf) {
                 try {
                     avplay.setBufferingParam('PLAYER_BUFFER_FOR_PLAY', 'PLAYER_BUFFER_SIZE_IN_SECOND', buf[0]);
@@ -660,7 +699,7 @@ var PlayerParts = {};
             });
             try { avplay.setStreamingProperty('ADAPTIVE_INFO', adaptiveInfo()); } catch (e0) {}
             _openedAt = Date.now();
-            setTimeout(startCheck, AV_START_MS + 500);
+            setTimeout(function () { if (S.active && token === _playToken) { startCheck(); } }, startBudget() + 500);
             avplay.prepareAsync(function () {
                 if (!S.active || token !== _playToken) { return; }
                 U.spinner(false);
@@ -721,6 +760,7 @@ var PlayerParts = {};
     function reportStart(ok, err) {
         if (!S.ctx || S.ctx._reported) { return; }
         S.ctx._reported = true;
+        if (!S.ctx.private && Stremio.sourceHealth) { Stremio.sourceHealth.record(S.ctx.stream, ok ? 'success' : 'failure'); }
         var cb = ok ? S.ctx.onStarted : S.ctx.onFailed;
         if (cb) { try { cb(err, S.ctx); } catch (e) {} }
     }
@@ -1014,7 +1054,7 @@ var PlayerParts = {};
         if (tried.length > NEXT_TRIES) { return false; }
         var n = null;
         try { n = c.nextSource(tried, c._avoid || []); } catch (e) { n = null; }
-        if (!n || !n.source || !n.source.url) { return false; }
+        if (!n || !n.source || (!n.source.url && !(n.source.stream && n.source.stream.infoHash))) { return false; }
         c._tried = tried;   // (kept by the next one: not a source's own field)
         var msg = (notice ? notice.text + '  ·  trying' : 'Didn’t start: trying') + ' the next source (' + (tried.length + 1) + ' of ' + Math.min(n.total, NEXT_TRIES + 1) + ')…';
         U.log('player', 'Source didn’t start: trying the next one (' + (tried.length + 1) + ')');
@@ -1073,14 +1113,17 @@ var PlayerParts = {};
     }
     // Not playing after AV_START_MS (no answer from the server, or opened and nothing shown): the
     // next source when there's one; else it stops and says so (not while you've paused it).
+    function startBudget() { return S.ctx && S.ctx._nativeTorrent ? 120000 : AV_START_MS; }
     function startCheck() {
-        if (!S.active || S.playing || !useAV || !_openedAt || Date.now() - _openedAt < AV_START_MS) { return; }
-        if (_reco.tries) { liveDropped('Couldn’t reconnect'); return; }   // (a reconnect's try: the next one)
-        if (nextSourceOnFail()) { return; }
+        var budget = startBudget();
+        if (!S.active || S.torrentPreparing || S.playing || !useAV || !_openedAt || Date.now() - _openedAt < budget) { return; }
         if (S.playStarted && isPaused()) { return; }
-        U.log('player', 'Didn’t start: nothing played in ' + (AV_START_MS / 1000) + ' s (' + where(S.ctx && S.ctx.url) + ')');
+        if (_reco.tries) { liveDropped('Couldn’t reconnect'); return; }   // (a reconnect's try: the next one)
+        if (S.ctx && !S.ctx.private && !S.ctx._healthTimedOut && Stremio.sourceHealth) { S.ctx._healthTimedOut = true; Stremio.sourceHealth.record(S.ctx.stream, 'failure'); }
+        if (nextSourceOnFail()) { return; }
+        U.log('player', 'Didn’t start: nothing played in ' + (budget / 1000) + ' s (' + where(S.ctx && S.ctx.url) + ')');
         U.spinner(false);
-        U.toast('Didn’t start: nothing played in ' + (AV_START_MS / 1000) + ' seconds. Try another source.', 6000);
+        U.toast('Didn’t start: nothing played in ' + (budget / 1000) + ' seconds. Try another source.', 6000);
         exitLater();
     }
     P.startCheck = startCheck;
@@ -1278,6 +1321,9 @@ var PlayerParts = {};
 
     function exit() {
         if (!S.active) { return; }
+        if (_torrentCancel) { _torrentCancel.cancel(); _torrentCancel = null; }
+        if ((S.torrentPreparing || (S.ctx && S.ctx._nativeTorrent)) && typeof NativeBridge !== 'undefined') { NativeBridge.stopTorrent(); }
+        S.torrentPreparing = false;
         if (U.crumb) { U.crumb('player closed'); }
         if (P.sleepClear) { P.sleepClear(); }   // (the sleep timer: this playback's)
         saveProgress();
@@ -1312,6 +1358,7 @@ var PlayerParts = {};
             S.videoEl.className = '';
         }
         document.body.style.background = '';
+        document.documentElement.className = document.documentElement.className.replace(/(^|\s)tv23-video(?=\s|$)/g, '');
         U.byId('app').className = '';
         U.spinner(false);
         // finished: this playback reached the credits/end (and so marked the item watched)

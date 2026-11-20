@@ -1,56 +1,20 @@
 {
-  "name": "stremiok",
-  "version": "2.2.0",
-  "description": "StremioK streaming client for Tizen 3.0+ Samsung TVs (TizenBrew app module).",
-  "packageType": "app",
-  "appName": "StremioK",
-  "appPath": "index.html",
-  "serviceFile": "service/index.js",
-  "files": [
-    "index.html",
-    "css",
-    "js",
-    "service",
-    "icon.png",
-    "config.xml",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE"
-  ],
-  "keys": [
-    "MediaPlay",
-    "MediaPause",
-    "MediaPlayPause",
-    "MediaStop",
-    "MediaRewind",
-    "MediaFastForward",
-    "MediaTrackPrevious",
-    "MediaTrackNext",
-    "ChannelUp",
-    "ChannelDown",
-    "ColorF0Red",
-    "ColorF1Green",
-    "ColorF2Yellow",
-    "ColorF3Blue",
-    "0",
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-    "7",
-    "8",
-    "9"
-  ],
-  "evaluateScriptOnDocumentStart": false,
+  "name": "stremiok-tizen-2.3",
+  "version": "2.5.0",
+  "private": true,
+  "description": "Open-source Stremio addon client for older Samsung TVs running Tizen 2.3",
   "license": "MIT",
-  "homepage": "https://github.com/Kepler75/StremioK#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Kepler75/StremioK.git"
+  "repository": "github:socoliuc/StremioK-Tizen-2.3",
+  "scripts": {
+    "test": "node scripts/check-tv23.cjs . && node scripts/test-account-history.cjs && node scripts/test-source-health.cjs && node scripts/test-image-hidden-screen.cjs && node scripts/test-episode-artwork.cjs",
+    "build:native": "node scripts/build-quickjs-nacl.cjs && node scripts/build-bearssl-nacl.cjs && node scripts/build-tv-engine.cjs && node scripts/nacl-trust-anchors.cjs && node scripts/build-tv-host.cjs",
+    "build:widget": "npm run build:native && node scripts/package-unsigned.cjs"
   },
-  "bugs": {
-    "url": "https://github.com/Kepler75/StremioK/issues"
+  "devDependencies": {
+    "acorn": "8.19.0",
+    "bn.js": "5.2.5",
+    "esbuild": "0.27.3",
+    "jszip": "3.10.2",
+    "node-forge": "1.4.3"
   }
 }

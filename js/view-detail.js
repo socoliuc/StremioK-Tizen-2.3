@@ -93,6 +93,7 @@
         Stremio.getMeta(type, id, pageCancel()).then(function (meta) {
             if (!still()) { return; }
             _d.meta = meta;
+            if (type === 'series' && typeof StremioAccount !== 'undefined' && StremioAccount.hydrateWatched) { StremioAccount.hydrateWatched(meta); }
             U.spinner(false);
             afterMeta();
         }, function (err) {
@@ -204,6 +205,7 @@
         var st = { url: p.url, name: p.name, _headers: U.sanitizeHeaders(p.headers) || undefined,
             behaviorHints: (p.fileHints && typeof p.fileHints === 'object') ? p.fileHints : undefined };   // (its file: for subtitles made for it)
         if (/^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(p.url || '')) { st._yt = true; st.ytPage = p.url; }   // (a YouTube video: through the service again)
+        if (p.torrent && /^[a-f0-9]{40}$/i.test(p.torrent.infoHash || '')) { st.infoHash = p.torrent.infoHash; st.fileIdx = p.torrent.fileIdx; st.sources = p.torrent.sources; st._torrentAllowLocal = p.torrent._torrentAllowLocal === true; }
         resumeSources(startPlayback(st, p.id, p.name, how), p.id);
     }
     // Played straight away, before the title's sources were in (an episode's aren't loaded
@@ -841,7 +843,7 @@
             : '▶  Play  ' + epCode(up.v));
         btn.__onselect = function () {
             // resume the exact stream when one was saved; otherwise pick a source
-            if (up.resume && up.resume.url) { startResume(up.resume); }
+            if (up.resume && (up.resume.url || up.resume.torrent)) { startResume(up.resume); }
             else { openStreams(up.v.id, epName(up.v), false, AUTO); }
         };
         // hold OK: where you were, or the episode from the start (its saved source; with none
@@ -851,7 +853,7 @@
                 var code = epCode(up.v);
                 pickList((_d.meta.name || '') + '  ' + code, [['resume', 'Resume at ' + U.fmtTime(up.resume.position)], ['start', 'Play ' + code + ' from the start']], null, function (k) {
                     if (k === 'resume') { btn.__onselect(); return; }
-                    if (up.resume.url) { startResume(Object.assign({}, up.resume, { fromStart: true })); }
+                    if (up.resume.url || up.resume.torrent) { startResume(Object.assign({}, up.resume, { fromStart: true })); }
                     else { openStreams(up.v.id, epName(up.v), false, { fromStart: true }); }
                 });
             };
@@ -1065,6 +1067,7 @@
     }
     function episodeWatched(video) {
         var kind = (_d && _d.collection) ? 'movie' : 'series';   // (a collection's films: their own marks)
+        if (kind === 'series' && _d && typeof StremioAccount !== 'undefined' && StremioAccount.hydrateWatched) { StremioAccount.hydrateWatched(_d.meta); }
         return Player.isWatched(kind, video.id);   // (marks here and Trakt's history, weighed by time: player-store)
     }
 
@@ -1182,6 +1185,9 @@
         var id = meta.id || _d.id, now = Date.now();
         var aired = (meta.videos || []).filter(function (v) { var at = airsAt(v); return seasonOf(v) !== 0 && !(at > now); });
         var all = aired.length > 0 && aired.every(episodeWatched);
+        // Imported episode marks may complete a show, but opening it is not a new
+        // local viewing event. Keep this tick in the account overlay until logout.
+        if (typeof StremioAccount !== 'undefined' && StremioAccount.deriveSeriesCompletion && StremioAccount.deriveSeriesCompletion(meta, all)) { return; }
         if (all !== Player.isWatched('series', id)) { Player.setWatched('series', id, all); markHomeDirty(); }
     }
 
@@ -1322,7 +1328,7 @@
     var SERVICE_LABEL = /\b(subscription|subscribe|rent|buy|purchase|netflix|disney\s*(\+|plus)|hbo|hbo max|hulu|peacock|prime video|apple tv\+?|paramount\+?|starz|showtime)\b/i;
     function isSubscriptionStream(stream) {
         if (!Stremio.isPlayable(stream)) { return true; }   // external "where to watch" always sinks to the bottom
-        var host = (stream.url.match(/^https?:\/\/([^\/:?#]+)/i) || [])[1] || '';
+        var host = ((stream.url || '').match(/^https?:\/\/([^\/:?#]+)/i) || [])[1] || '';
         if (SERVICE_HOSTS.test(host)) { return true; }
         // the label's first line is the addon's tag ("Netflix · Subscription"), not the file
         return SERVICE_LABEL.test(('' + (stream.name || '')).split('\n')[0]);
@@ -1393,6 +1399,7 @@
     var RANK_CMP = {
         res: function (a, b) { return TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier); },
         uncached: function (a, b) { return (a.info.cache === -1 ? 1 : 0) - (b.info.cache === -1 ? 1 : 0); },
+        health: function (a, b) { return Stremio.sourceHealth ? Stremio.sourceHealth.compare(a.st, b.st) : 0; },
         kind: function (a, b) { return (KIND_SCORE[b.info.kind] || 0) - (KIND_SCORE[a.info.kind] || 0); },
         hdr: function (a, b) { return (b.info.hdr ? 1 : 0) - (a.info.hdr ? 1 : 0); },
         addon: function (a, b) { return (a.st._addonRank || 0) - (b.st._addonRank || 0); },
@@ -1407,6 +1414,7 @@
         var cmps = on.length || cfg.criteria.length ? on.map(function (c) { return RANK_CMP[c.key]; }) : [RANK_CMP.res];
         var byRes = cmps[0] === RANK_CMP.res;   // resolution first: grouped by it
         var hist = cfg.played ? playedList(titleId) : [];
+        var healthOn = on.some(function (c) { return c.key === 'health'; });
         var marked = unsuitableList(titleId);
         var rows = list.map(function (st, i) {
             var info = Stremio.streamInfo(st);
@@ -1417,6 +1425,7 @@
             var bad = usable ? Stremio.badFormats(st, info) : [];
             var blocked = usable ? Stremio.blockedRes(st, info) : '';   // a resolution you don't allow
             var pr = (usable && !unsuitable && !worded && !sized && !bad.length && !blocked) ? playedIndex(hist, st, info) : -1;
+            if (healthOn && Stremio.sourceHealth && Stremio.sourceHealth.get(st) === 'bad') { pr = -1; }
             var group = !usable ? 'where' : unsuitable ? 'unsuitable' : worded ? 'worded' : sized ? 'sized' : (bad.length || blocked) ? 'bad' : st._localFile ? 'local' : pr >= 0 ? 'played' : byRes ? tierOf(info) : 'ranked';
             var app = group === 'where' ? whereApp(st) : null;   // links that open an app here come first
             return { st: st, i: i, info: info, bad: bad, blocked: blocked, pr: pr, group: group, tier: tierOf(info), app: app, unsuitable: unsuitable, worded: worded, sized: sized };
@@ -1468,7 +1477,7 @@
         var rows = (_d && _d.streams) ? filterRows(rankRowsFor(_d.streams)) : [], seen = {}, all = [];   // (within the filter: Addon ▾ / Resolution ▾)
         rows.forEach(function (r) {
             var st = r.st, id = Stremio.sourceId(st), dt = Stremio.debridOf ? Stremio.debridOf(st) : null;
-            if (!pickable(r) || seen[id] || st._yt || st._localFile || !/^https?:\/\//i.test(st.url || '')) { return; }
+            if (!pickable(r) || seen[id] || st._yt || st._localFile || !Stremio.isPlayable(st)) { return; }
             if (dt && (avoid || []).some(function (x) { return x.addon === st._addon && x.tag === dt.tag; })) { return; }
             seen[id] = 1; all.push(st);
         });
@@ -1489,13 +1498,14 @@
     var PLAYED_KEY = 'stremiok.playedsrc', PLAYED_PER_TITLE = 5, PLAYED_TITLES = 100;
     // the file itself: name + size when the addon says, else its link
     function fileIdentity(st) {
+        if (/^[a-f0-9]{40}$/i.test(st.infoHash || '')) { return 'h|' + st.infoHash.toLowerCase() + '|' + (st.fileIdx == null ? '' : st.fileIdx); }
         var bh = st.behaviorHints || {};
         if (bh.filename && bh.videoSize) { return 'f|' + ('' + bh.filename).toLowerCase() + '|' + bh.videoSize; }
         return 'u|' + (st.url || '');
     }
     function playedList(titleId) { return titleId ? ((U.store.get(PLAYED_KEY, {}) || {})[titleId] || []) : []; }
     function rememberPlayed(titleId, st, info) {
-        if (!titleId || !st.url) { return; }
+        if (!titleId || (!st.url && !st.infoHash)) { return; }
         var all = U.store.get(PLAYED_KEY, {}) || {}, id = fileIdentity(st);
         var list = (all[titleId] || []).filter(function (x) { return x.id !== id; });
         list.unshift({ id: id, binge: (st.behaviorHints || {}).bingeGroup || '', addon: st._addon || '',
@@ -1908,6 +1918,8 @@
             var desc = Stremio.streamDescription(stream);
             if (size && !/(TB|GB|MB)\b/i.test(desc)) { lines.push('💾 ' + size); }
             if (desc) { lines.push(desc); }
+            var healthLabel = Stremio.sourceHealth && Stremio.sourceHealth.label(stream);
+            if (healthLabel) { lines.push(healthLabel + ' on this TV'); }
             if (stream._addon) { lines.push('⚙️ ' + stream._addon + (stream._also ? '   ·   also on ' + stream._also.join(', ') : '')); }
             if (stream._earlier) { lines.push('🕘 From earlier: you played it ' + U.dayLabel(stream._earlier) + '; the addon didn’t answer in time just now, so it may no longer play'); }
             if (row && row.unsuitable) { lines.push('⛔ Marked not suitable for this title  ·  hold OK to put it back'); }

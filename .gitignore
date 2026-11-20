@@ -1,0 +1,17 @@
+node_modules/
+.build/
+dist/
+.secure/
+.env
+.env.*
+*.wgt
+*.nexe
+*.p12
+*.pfx
+*.pem
+*.key
+author-signature.xml
+signature1.xml
+signature2.xml
+native/engine-bundle.h
+native/trust-anchors.h
